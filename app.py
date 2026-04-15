@@ -473,10 +473,32 @@ def analyze(request: Request, domain: str):
 
     direct_send = evaluate_direct_send(domain, vendor, mx, dmarc, msft_dkim)
     enhanced_filtering = evaluate_enhanced_filtering(vendor, mx)
+
+    # Open relay check via probe
+    open_relay = {"status": "Unknown", "reason": "", "mx_tested": [], "tls_versions": [], "banners": []}
+    try:
+        relay_url = f"http://144.202.103.114:8001/relay?domain={urllib.parse.quote(domain)}"
+        with urllib.request.urlopen(relay_url, timeout=20) as resp:
+            relay_data = json.loads(resp.read().decode())
+        open_relay["status"] = relay_data.get("status", "Unknown")
+        open_relay["reason"] = relay_data.get("reason", "")
+        open_relay["mx_tested"] = relay_data.get("mx_tested", [])
+        for r in relay_data.get("results", []):
+            if r.get("tls_version"):
+                open_relay["tls_versions"].append(r["tls_version"])
+            if r.get("banner"):
+                open_relay["banners"].append(r["banner"])
+    except Exception:
+        open_relay["status"] = "Unavailable"
+        open_relay["reason"] = "Open relay check unavailable."
+
     recommended_fixes = generate_recommendations(
         spf, dmarc, mta_sts_record, tls_rpt_record,
         direct_send, enhanced_filtering, msft_dkim,
     )
+
+    if open_relay["status"] == "Open Relay":
+        recommended_fixes.insert(0, "CRITICAL: Open relay detected — your mail server will forward email for anyone. Restrict relay immediately.")
 
     score, risk_level, score_label, findings = calculate_score(
         spf, dmarc, spf_lookups, mta_sts_record,
@@ -517,5 +539,6 @@ def analyze(request: Request, domain: str):
             "findings": findings,
             "score_summary": score_summary,
             "report_date": report_date,
+            "open_relay": open_relay,
         }
     )

@@ -180,23 +180,46 @@
 
         .badge-row {
             display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-top: 14px;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 16px;
             margin-bottom: 6px;
+        }
+
+        .badge-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .badge-group-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            min-width: 90px;
         }
 
         .badge {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            padding: 8px 12px;
+            gap: 6px;
+            padding: 5px 10px;
             border-radius: 999px;
-            font-size: 13px;
-            font-weight: 700;
+            font-size: 12px;
+            font-weight: 600;
             border: 1px solid var(--border);
             background: rgba(255,255,255,0.04);
             color: var(--text);
+        }
+
+        .badge .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            flex-shrink: 0;
         }
 
         .badge-vendor {
@@ -213,21 +236,27 @@
 
         .badge-good {
             color: var(--good);
-            background: rgba(39, 194, 129, 0.12);
-            border-color: rgba(39, 194, 129, 0.28);
+            background: rgba(39, 194, 129, 0.08);
+            border-color: rgba(39, 194, 129, 0.2);
         }
+
+        .badge-good .dot { background: var(--good); }
 
         .badge-warn {
             color: var(--warn);
-            background: rgba(240, 179, 74, 0.12);
-            border-color: rgba(240, 179, 74, 0.28);
+            background: rgba(240, 179, 74, 0.08);
+            border-color: rgba(240, 179, 74, 0.2);
         }
+
+        .badge-warn .dot { background: var(--warn); }
 
         .badge-bad {
             color: var(--bad);
-            background: rgba(255, 107, 107, 0.12);
-            border-color: rgba(255, 107, 107, 0.28);
+            background: rgba(255, 107, 107, 0.08);
+            border-color: rgba(255, 107, 107, 0.2);
         }
+
+        .badge-bad .dot { background: var(--bad); }
 
         .overview-grid {
             display: grid;
@@ -496,57 +525,84 @@
                     <h2 class="domain">{{ domain }}</h2>
 
                     <div class="badge-row">
-                        {% if vendor == "Unknown" %}
-                            <span class="badge badge-vendor-unknown">{{ vendor }} Vendor</span>
-                        {% else %}
-                            <span class="badge badge-vendor">{{ vendor }}</span>
-                        {% endif %}
+                        <!-- Vendor -->
+                        <div class="badge-group">
+                            <span class="badge-group-label">Gateway</span>
+                            {% if vendor == "Unknown" %}
+                                <span class="badge badge-vendor-unknown">{{ vendor }}</span>
+                            {% else %}
+                                <span class="badge badge-vendor">{{ vendor }}</span>
+                            {% endif %}
+                        </div>
 
-                        {% if spf %}
-                            <span class="badge badge-good">SPF Present</span>
-                        {% else %}
-                            <span class="badge badge-warn">SPF Missing</span>
-                        {% endif %}
+                        <!-- Authentication row -->
+                        <div class="badge-group">
+                            <span class="badge-group-label">Auth</span>
 
-                        {% if dmarc and "reject" in dmarc.lower() %}
-                            <span class="badge badge-good">DMARC Reject</span>
-                        {% elif dmarc %}
-                            <span class="badge badge-warn">DMARC Not Enforced</span>
-                        {% else %}
-                            <span class="badge badge-warn">DMARC Missing</span>
-                        {% endif %}
+                            {% if spf %}
+                                <span class="badge badge-good"><span class="dot"></span>SPF</span>
+                            {% else %}
+                                <span class="badge badge-warn"><span class="dot"></span>SPF</span>
+                            {% endif %}
 
-                        {% if dkim_present %}
-                            <span class="badge badge-good">DKIM Detected</span>
-                        {% else %}
-                            <span class="badge badge-warn">DKIM Not Detected</span>
-                        {% endif %}
+                            {% if dmarc and "reject" in dmarc.lower() %}
+                                <span class="badge badge-good"><span class="dot"></span>DMARC Reject</span>
+                            {% elif dmarc %}
+                                <span class="badge badge-warn"><span class="dot"></span>DMARC None</span>
+                            {% else %}
+                                <span class="badge badge-bad"><span class="dot"></span>DMARC Missing</span>
+                            {% endif %}
 
-                        {% if mta_sts_record %}
-                            <span class="badge badge-good">MTA-STS Present</span>
-                        {% else %}
-                            <span class="badge badge-warn">MTA-STS Missing</span>
-                        {% endif %}
+                            {% if dkim_present %}
+                                <span class="badge badge-good"><span class="dot"></span>DKIM</span>
+                            {% else %}
+                                <span class="badge badge-warn"><span class="dot"></span>DKIM</span>
+                            {% endif %}
 
-                        {% if tls_rpt_record %}
-                            <span class="badge badge-good">TLS-RPT Present</span>
-                        {% else %}
-                            <span class="badge badge-warn">TLS-RPT Missing</span>
-                        {% endif %}
+                            {% if bimi_record %}
+                                <span class="badge badge-good"><span class="dot"></span>BIMI</span>
+                            {% endif %}
+                        </div>
 
-                        {% if direct_send.status == "Likely Protected" %}
-                            <span class="badge badge-good">Direct Send Likely Protected</span>
-                        {% elif direct_send.status == "Potential Exposure" %}
-                            <span class="badge badge-warn">Direct Send Potential Exposure</span>
-                        {% elif direct_send.status == "At Risk" %}
-                            <span class="badge badge-bad">Direct Send At Risk</span>
-                        {% else %}
-                            <span class="badge badge-warn">Direct Send Unknown</span>
-                        {% endif %}
+                        <!-- Transport row -->
+                        <div class="badge-group">
+                            <span class="badge-group-label">Transport</span>
 
-                        {% if bimi_record %}
-                            <span class="badge badge-good">BIMI Present</span>
-                        {% endif %}
+                            {% if mta_sts_record %}
+                                <span class="badge badge-good"><span class="dot"></span>MTA-STS</span>
+                            {% else %}
+                                <span class="badge badge-warn"><span class="dot"></span>MTA-STS</span>
+                            {% endif %}
+
+                            {% if tls_rpt_record %}
+                                <span class="badge badge-good"><span class="dot"></span>TLS-RPT</span>
+                            {% else %}
+                                <span class="badge badge-warn"><span class="dot"></span>TLS-RPT</span>
+                            {% endif %}
+                        </div>
+
+                        <!-- Protection row -->
+                        <div class="badge-group">
+                            <span class="badge-group-label">Protection</span>
+
+                            {% if direct_send.status == "Likely Protected" %}
+                                <span class="badge badge-good"><span class="dot"></span>Direct Send</span>
+                            {% elif direct_send.status == "Potential Exposure" %}
+                                <span class="badge badge-warn"><span class="dot"></span>Direct Send</span>
+                            {% elif direct_send.status == "At Risk" %}
+                                <span class="badge badge-bad"><span class="dot"></span>Direct Send</span>
+                            {% else %}
+                                <span class="badge badge-warn"><span class="dot"></span>Direct Send</span>
+                            {% endif %}
+
+                            {% if open_relay.status == "Open Relay" %}
+                                <span class="badge badge-bad"><span class="dot"></span>Open Relay</span>
+                            {% elif open_relay.status == "Not Open Relay" %}
+                                <span class="badge badge-good"><span class="dot"></span>No Relay</span>
+                            {% else %}
+                                <span class="badge badge-warn"><span class="dot"></span>Relay Unknown</span>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
 
@@ -815,6 +871,56 @@
                         <br><br>
                         {{ enhanced_filtering.reason }}
                     </div>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <h3 class="section-title">Open Relay Test</h3>
+                <p class="section-sub">An open relay accepts and forwards email from anyone to anyone without authentication — enabling spam, phishing, and CEO impersonation attacks using your own infrastructure.</p>
+                <div class="record-box">
+                    <div style="margin-bottom: 14px;">
+                        <strong>Status:</strong>
+                        {% if open_relay.status == "Open Relay" %}
+                            <span class="badge badge-bad">Open Relay Detected</span>
+                        {% elif open_relay.status == "Not Open Relay" %}
+                            <span class="badge badge-good">Not Open Relay</span>
+                        {% elif open_relay.status == "Unavailable" %}
+                            <span class="badge badge-warn">Check Unavailable</span>
+                        {% else %}
+                            <span class="badge badge-warn">Unknown</span>
+                        {% endif %}
+                    </div>
+                    <div class="muted" style="margin-bottom: 12px;">{{ open_relay.reason }}</div>
+                    {% if open_relay.mx_tested %}
+                    <div style="margin-bottom: 10px;">
+                        <strong>MX Hosts Tested:</strong>
+                        <div class="muted" style="margin-top: 6px;">
+                            {% for mx in open_relay.mx_tested %}
+                                <div><code>{{ mx }}</code></div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if open_relay.tls_versions %}
+                    <div style="margin-bottom: 10px;">
+                        <strong>TLS Version Detected:</strong>
+                        <div class="muted" style="margin-top: 6px;">
+                            {% for tls in open_relay.tls_versions %}
+                                <span class="{% if 'TLSv1.2' in tls or 'TLSv1.3' in tls %}finding-good{% else %}finding-warn{% endif %}" style="display:inline-flex;padding:4px 8px;border-radius:8px;font-size:13px;font-weight:600;">{{ tls }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if open_relay.banners %}
+                    <div>
+                        <strong>Server Banner:</strong>
+                        <div style="margin-top: 6px;">
+                            {% for banner in open_relay.banners[:1] %}
+                                <code class="muted" style="font-size:12px;">{{ banner }}</code>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
 
