@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MailFlow Sentinel</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230b1020'/><path d='M4 10l12 9 12-9' stroke='%235aa9ff' stroke-width='2' fill='none' stroke-linecap='round'/><rect x='4' y='10' width='24' height='16' rx='2' stroke='%235aa9ff' stroke-width='2' fill='none'/></svg>">
+    <style>
+        :root {
+            --bg: #0b1020;
+            --panel: rgba(18, 25, 45, 0.78);
+            --text: #e8edf7;
+            --muted: #95a3bf;
+            --border: rgba(255, 255, 255, 0.08);
+            --accent: #5aa9ff;
+            --accent-2: #7c5cff;
+            --good: #27c281;
+            --warn: #f0b34a;
+            --bad: #ff6b6b;
+            --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(90, 169, 255, 0.14), transparent 28%),
+                radial-gradient(circle at top right, rgba(124, 92, 255, 0.14), transparent 30%),
+                linear-gradient(180deg, #09101c 0%, #0b1020 100%);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .wrap {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 36px 20px 60px;
+        }
+
+        .header-row {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .title {
+            margin: 0;
+            font-size: 42px;
+            line-height: 1.05;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+        }
+
+        .title span {
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            margin: 0 0 24px;
+            color: var(--muted);
+            font-size: 16px;
+        }
+
+        .search-card,
+        .result-card,
+        .section-card,
+        .mini-card {
+            background: var(--panel);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+        }
+
+        .search-card {
+            border-radius: 22px;
+            padding: 20px;
+            margin-bottom: 26px;
+        }
+
+        .search-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .search-row input {
+            flex: 1 1 480px;
+            min-width: 260px;
+            padding: 16px 18px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.04);
+            color: var(--text);
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-row input:focus {
+            border-color: rgba(90,169,255,0.4);
+        }
+
+        .search-row input::placeholder { color: #7f8ca7; }
+
+        .search-row button {
+            padding: 16px 20px;
+            border: 0;
+            border-radius: 14px;
+            cursor: pointer;
+            color: white;
+            font-weight: 700;
+            font-size: 15px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            box-shadow: 0 10px 25px rgba(92, 122, 255, 0.28);
+            transition: opacity 0.2s, transform 0.1s;
+        }
+
+        .search-row button:hover { opacity: 0.9; transform: translateY(-1px); }
+        .search-row button:active { transform: translateY(0); }
+
+        .result-card {
+            border-radius: 24px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .domain {
+            margin: 0;
+            font-size: 36px;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+        }
+
+        .score-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+        }
+
+        .risk-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            border-radius: 999px;
+            font-weight: 800;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.04);
+        }
+
+        .risk-low { color: var(--good); }
+        .risk-medium { color: var(--warn); }
+        .risk-high { color: var(--bad); }
+
+        .score-note {
+            max-width: 420px;
+            text-align: right;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.45;
+        }
+
+        .badge-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 14px;
+            margin-bottom: 6px;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 700;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.04);
+            color: var(--text);
+        }
+
+        .badge-vendor {
+            color: #c4b5fd;
+            background: rgba(124, 92, 255, 0.12);
+            border-color: rgba(124, 92, 255, 0.28);
+        }
+
+        .badge-vendor-unknown {
+            color: var(--muted);
+            background: rgba(149,163,191,0.1);
+            border-color: rgba(149,163,191,0.2);
+        }
+
+        .badge-good {
+            color: var(--good);
+            background: rgba(39, 194, 129, 0.12);
+            border-color: rgba(39, 194, 129, 0.28);
+        }
+
+        .badge-warn {
+            color: var(--warn);
+            background: rgba(240, 179, 74, 0.12);
+            border-color: rgba(240, 179, 74, 0.28);
+        }
+
+        .badge-bad {
+            color: var(--bad);
+            background: rgba(255, 107, 107, 0.12);
+            border-color: rgba(255, 107, 107, 0.28);
+        }
+
+        .overview-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+            margin-top: 24px;
+        }
+
+        .mini-card {
+            border-radius: 18px;
+            padding: 18px;
+        }
+
+        .mini-label {
+            color: var(--muted);
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 10px;
+        }
+
+        .mini-value {
+            font-size: 28px;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+
+        .mini-note { color: var(--muted); font-size: 14px; }
+
+        .sections { display: grid; gap: 18px; }
+
+        .section-card {
+            border-radius: 20px;
+            padding: 22px;
+        }
+
+        .section-title {
+            margin: 0 0 14px;
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        .section-sub {
+            margin: 0 0 16px;
+            color: var(--muted);
+            font-size: 15px;
+        }
+
+        .record-box, pre {
+            background: rgba(255,255,255,0.045);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 16px;
+            padding: 16px;
+            color: var(--text);
+            overflow-x: auto;
+        }
+
+        code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            color: #dbe7ff;
+        }
+
+        pre {
+            white-space: pre-wrap;
+            line-height: 1.45;
+        }
+
+        ul.clean {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: grid;
+            gap: 10px;
+        }
+
+        ul.clean li {
+            padding: 14px 16px;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .finding-good, .finding-warn, .finding-bad {
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-weight: 700;
+            font-size: 13px;
+        }
+
+        .finding-good {
+            color: var(--good);
+            background: rgba(39, 194, 129, 0.12);
+            border: 1px solid rgba(39, 194, 129, 0.28);
+        }
+
+        .finding-warn {
+            color: var(--warn);
+            background: rgba(240, 179, 74, 0.12);
+            border: 1px solid rgba(240, 179, 74, 0.28);
+        }
+
+        .finding-bad {
+            color: var(--bad);
+            background: rgba(255, 107, 107, 0.12);
+            border: 1px solid rgba(255, 107, 107, 0.28);
+        }
+
+        .muted { color: var(--muted); }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+        }
+
+        /* Action buttons row */
+        .action-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
+
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.05);
+            color: var(--text);
+            transition: background 0.2s, border-color 0.2s;
+            text-decoration: none;
+        }
+
+        .btn-action:hover {
+            background: rgba(255,255,255,0.09);
+            border-color: rgba(255,255,255,0.15);
+        }
+
+        .btn-action.copied {
+            color: var(--good);
+            border-color: rgba(39,194,129,0.3);
+        }
+
+        /* Scan another domain CTA */
+        .scan-another {
+            margin-top: 32px;
+            padding: 24px;
+            border-radius: 20px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .scan-another p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 15px;
+        }
+
+        .scan-another strong {
+            display: block;
+            font-size: 18px;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+
+        .btn-scan {
+            padding: 12px 22px;
+            border: 0;
+            border-radius: 14px;
+            cursor: pointer;
+            color: white;
+            font-weight: 700;
+            font-size: 15px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            white-space: nowrap;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        @media (max-width: 1000px) {
+            .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+
+        @media (max-width: 768px) {
+            .wrap { padding: 20px 14px 40px; }
+            .title { font-size: 28px; }
+            .subtitle { font-size: 14px; }
+            .search-card { padding: 14px; border-radius: 16px; }
+            .search-row { flex-direction: column; gap: 10px; }
+            .search-row input { flex: 1 1 100%; font-size: 15px; padding: 14px 16px; }
+            .search-row button { width: 100%; padding: 14px; font-size: 15px; }
+            .result-card { padding: 16px; border-radius: 18px; }
+            .topbar { flex-direction: column; align-items: flex-start; gap: 14px; }
+            .domain { font-size: 26px; }
+            .badge-row { gap: 6px; }
+            .badge { font-size: 12px; padding: 6px 10px; }
+            .score-wrap { align-items: flex-start; width: 100%; }
+            .score-note { text-align: left; max-width: 100%; font-size: 13px; }
+            .risk-pill { font-size: 14px; padding: 10px 14px; }
+            .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+            .mini-card { padding: 14px; border-radius: 14px; }
+            .mini-value { font-size: 22px; }
+            .mini-note { font-size: 12px; }
+            .grid-2 { grid-template-columns: 1fr; gap: 12px; }
+            .section-card { padding: 16px; border-radius: 16px; }
+            .section-title { font-size: 20px; }
+            .section-sub { font-size: 14px; }
+            .action-row { flex-direction: column; gap: 8px; }
+            .btn-action { width: 100%; justify-content: center; }
+            .scan-another { flex-direction: column; align-items: flex-start; gap: 14px; }
+            .btn-scan { width: 100%; text-align: center; }
+            .record-box, pre { font-size: 13px; padding: 12px; }
+        }
+
+        @media (max-width: 400px) {
+            .overview-grid { grid-template-columns: 1fr; }
+            .title { font-size: 24px; }
+            .domain { font-size: 22px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="header-row">
+            <div>
+                <h1 class="title">MailFlow <span>Sentinel</span></h1>
+            </div>
+        </div>
+        <p class="subtitle">Run a fast DNS-based email security assessment for any domain or email address.</p>
+
+        <div class="search-card">
+            <form action="/analyze" method="get">
+                <div class="search-row">
+                    <input
+                        type="text"
+                        name="domain"
+                        placeholder="Enter domain or email (e.g. company.com)"
+                        value="{{ input_value or '' }}"
+                        autofocus
+                    >
+                    <button type="submit">Run Analysis</button>
+                </div>
+            </form>
+        </div>
+
+        {% if domain %}
+        <div class="result-card">
+            <div class="topbar">
+                <div>
+                    <h2 class="domain">{{ domain }}</h2>
+
+                    <div class="badge-row">
+                        {% if vendor == "Unknown" %}
+                            <span class="badge badge-vendor-unknown">{{ vendor }} Vendor</span>
+                        {% else %}
+                            <span class="badge badge-vendor">{{ vendor }}</span>
+                        {% endif %}
+
+                        {% if spf %}
+                            <span class="badge badge-good">SPF Present</span>
+                        {% else %}
+                            <span class="badge badge-warn">SPF Missing</span>
+                        {% endif %}
+
+                        {% if dmarc and "reject" in dmarc.lower() %}
+                            <span class="badge badge-good">DMARC Reject</span>
+                        {% elif dmarc %}
+                            <span class="badge badge-warn">DMARC Not Enforced</span>
+                        {% else %}
+                            <span class="badge badge-warn">DMARC Missing</span>
+                        {% endif %}
+
+                        {% if dkim_present %}
+                            <span class="badge badge-good">DKIM Detected</span>
+                        {% else %}
+                            <span class="badge badge-warn">DKIM Not Detected</span>
+                        {% endif %}
+
+                        {% if mta_sts_record %}
+                            <span class="badge badge-good">MTA-STS Present</span>
+                        {% else %}
+                            <span class="badge badge-warn">MTA-STS Missing</span>
+                        {% endif %}
+
+                        {% if tls_rpt_record %}
+                            <span class="badge badge-good">TLS-RPT Present</span>
+                        {% else %}
+                            <span class="badge badge-warn">TLS-RPT Missing</span>
+                        {% endif %}
+
+                        {% if direct_send.status == "Likely Protected" %}
+                            <span class="badge badge-good">Direct Send Likely Protected</span>
+                        {% elif direct_send.status == "Potential Exposure" %}
+                            <span class="badge badge-warn">Direct Send Potential Exposure</span>
+                        {% elif direct_send.status == "At Risk" %}
+                            <span class="badge badge-bad">Direct Send At Risk</span>
+                        {% else %}
+                            <span class="badge badge-warn">Direct Send Unknown</span>
+                        {% endif %}
+
+                        {% if bimi_record %}
+                            <span class="badge badge-good">BIMI Present</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="score-wrap">
+                    <div class="risk-pill risk-{{ risk_level.lower() }}">
+                        {{ score }} / 100 · {{ score_label }}
+                    </div>
+                    <div class="score-note">{{ score_summary }}</div>
+                </div>
+            </div>
+
+            <div class="overview-grid">
+                <div class="mini-card">
+                    <div class="mini-label">SPF</div>
+                    <div class="mini-value">
+                        {% if spf %}{{ spf_lookups }}/10{% else %}Missing{% endif %}
+                    </div>
+                    <div class="mini-note">
+                        {% if spf %}SPF record present with estimated lookup count{% else %}No SPF record found{% endif %}
+                    </div>
+                </div>
+
+                <div class="mini-card">
+                    <div class="mini-label">DMARC</div>
+                    <div class="mini-value">
+                        {% if dmarc and "reject" in dmarc.lower() %}Reject
+                        {% elif dmarc %}Present
+                        {% else %}Missing{% endif %}
+                    </div>
+                    <div class="mini-note">
+                        {% if dmarc and "reject" in dmarc.lower() %}Spoofed email should be blocked
+                        {% elif dmarc %}DMARC exists but is not fully enforced
+                        {% else %}No DMARC policy found{% endif %}
+                    </div>
+                </div>
+
+                <div class="mini-card">
+                    <div class="mini-label">MX Routing</div>
+                    <div class="mini-value">{% if mx %}Good{% else %}Missing{% endif %}</div>
+                    <div class="mini-note">
+                        {% if mx %}{{ mx|length }} MX record{% if mx|length != 1 %}s{% endif %} detected
+                        {% else %}No MX records detected{% endif %}
+                    </div>
+                </div>
+
+                <div class="mini-card">
+                    <div class="mini-label">Direct Send</div>
+                    <div class="mini-value">
+                        {% if direct_send.status == "Likely Protected" %}Low Risk
+                        {% elif direct_send.status == "Potential Exposure" %}Review
+                        {% elif direct_send.status == "At Risk" %}Risk
+                        {% else %}Unknown{% endif %}
+                    </div>
+                    <div class="mini-note">{{ direct_send.reason }}</div>
+                </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="action-row">
+                <button class="btn-action" onclick="copyShareLink(this)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                    Share Results
+                </button>
+                <button class="btn-action" onclick="copyReport(this)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                    Copy Report
+                </button>
+            </div>
+        </div>
+
+        <div class="sections">
+            <div class="grid-2">
+                <div class="section-card">
+                    <h3 class="section-title">MX Records</h3>
+                    <p class="section-sub">These records show where the domain receives email.</p>
+                    {% if mx %}
+                    <div class="record-box">
+                        {% for m in mx %}<div><code>{{ m }}</code></div>{% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="muted">No MX records found.</p>
+                    {% endif %}
+                </div>
+
+                <div class="section-card">
+                    <h3 class="section-title">SPF</h3>
+                    <p class="section-sub">SPF defines which mail servers are allowed to send on behalf of the domain.</p>
+                    {% if spf %}
+                    <div class="record-box"><code>{{ spf }}</code></div>
+                    <p class="muted" style="margin-top: 12px;">Estimated SPF lookups: <strong>{{ spf_lookups }}</strong></p>
+                    {% else %}
+                    <p class="muted">No SPF record found.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div class="section-card">
+                    <h3 class="section-title">DMARC</h3>
+                    <p class="section-sub">DMARC tells receiving mail systems what to do when SPF or DKIM checks fail.</p>
+                    {% if dmarc %}
+                    <div class="record-box"><code>{{ dmarc }}</code></div>
+                    {% else %}
+                    <p class="muted">No DMARC record found.</p>
+                    {% endif %}
+                </div>
+
+                <div class="section-card">
+                    <h3 class="section-title">Findings</h3>
+                    <p class="section-sub">Quick interpretation of what the current posture means.</p>
+                    {% if findings %}
+                    <ul class="clean">
+                        {% for f in findings %}
+                        <li>
+                            {% if "missing" in f.lower() %}
+                                <span class="finding-bad">{{ f }}</span>
+                            {% elif "none" in f.lower() or "validation" in f.lower() or "high" in f.lower() %}
+                                <span class="finding-warn">{{ f }}</span>
+                            {% else %}
+                                <span class="finding-good">{{ f }}</span>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="finding-good">No major issues found</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="section-card">
+                <h3 class="section-title">DKIM</h3>
+                <p class="section-sub">Verifies that email is authorized by the domain and was not altered in transit.</p>
+
+                <div class="record-box">
+                    <div style="margin-bottom: 16px;">
+                        <strong>Status:</strong>
+                        {% if dkim_present %}
+                            <span class="badge badge-good">Strong</span>
+                        {% else %}
+                            <span class="badge badge-bad">Not Configured</span>
+                        {% endif %}
+                    </div>
+
+                    <div style="margin-bottom: 16px;">
+                        <strong>Signing Authority:</strong>
+                        {% if dkim_signing_authority.status == "Inferred" %}
+                            <span class="badge badge-good">{{ dkim_signing_authority.authority }}</span>
+                        {% else %}
+                            <span class="badge badge-warn">{{ dkim_signing_authority.authority }}</span>
+                        {% endif %}
+                        <div class="muted" style="margin-top: 10px;">{{ dkim_signing_authority.detail }}</div>
+                    </div>
+
+                    <div>
+                        <strong>Active DKIM Keys</strong>
+                        <div style="margin-top: 12px;">
+                            {% for d in dkim_results %}
+                                {% if d.found %}
+                                <div style="margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                                    <div>✔ <strong>{{ d.selector }}</strong> ({{ d.label }}) {% if d.bits %}– {{ d.bits }} bit{% endif %}</div>
+                                    <div class="muted" style="margin-top: 6px;">DKIM DNS host: <code>{{ d.host }}</code></div>
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <details style="margin-top: 16px;">
+                        <summary style="cursor: pointer; color: var(--muted);">Other selectors checked</summary>
+                        <div style="margin-top: 10px;">
+                            {% for d in dkim_results %}
+                                {% if not d.found %}<div>{{ d.selector }} — Not Found</div>{% endif %}
+                            {% endfor %}
+                        </div>
+                    </details>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div class="section-card">
+                    <h3 class="section-title">MTA-STS</h3>
+                    <p class="section-sub">MTA-STS helps ensure inbound mail is delivered securely over TLS and only to approved mail servers.</p>
+
+                    {% if mta_sts_record %}
+                    <p><strong>DNS record</strong></p>
+                    <div class="record-box"><code>{{ mta_sts_record }}</code></div>
+                    {% else %}
+                    <p class="muted">DNS record missing.</p>
+                    {% endif %}
+
+                    <div style="margin-top: 14px;">
+                        {% if mta_sts_policy.found %}
+                        <p><strong>Policy URL</strong></p>
+                        <div class="record-box"><code>{{ mta_sts_policy.url }}</code></div>
+                        <pre style="margin-top: 12px;">{{ mta_sts_policy.body }}</pre>
+                        {% else %}
+                        <p class="muted">Policy URL not found at:</p>
+                        <div class="record-box"><code>{{ mta_sts_policy.url }}</code></div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="section-card">
+                    <h3 class="section-title">TLS-RPT</h3>
+                    <p class="section-sub">TLS-RPT enables reporting of SMTP TLS and MTA-STS delivery failures.</p>
+                    {% if tls_rpt_record %}
+                    <div class="record-box"><code>{{ tls_rpt_record }}</code></div>
+                    {% else %}
+                    <p class="muted">TLS-RPT record missing.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- BIMI Section -->
+            <div class="section-card">
+                <h3 class="section-title">BIMI</h3>
+                <p class="section-sub">Brand Indicators for Message Identification allows verified brand logos to appear in supporting email clients. Requires DMARC enforcement at reject or quarantine.</p>
+                {% if bimi_record %}
+                <div class="record-box"><code>{{ bimi_record }}</code></div>
+                <p class="muted" style="margin-top:12px;">BIMI record detected. Brand logo display is supported in Gmail, Apple Mail, and Yahoo Mail for senders with a Verified Mark Certificate (VMC).</p>
+                {% else %}
+                <p class="muted">No BIMI record found at <code>default._bimi.{{ domain }}</code>.</p>
+                {% if dmarc and ("reject" in dmarc.lower() or "quarantine" in dmarc.lower()) %}
+                <p class="muted" style="margin-top:8px;">✓ Your DMARC policy meets the prerequisite for BIMI. Publishing a BIMI record could increase brand visibility in recipient inboxes.</p>
+                {% else %}
+                <p class="muted" style="margin-top:8px;">DMARC must be at <strong>p=quarantine</strong> or <strong>p=reject</strong> before BIMI can be used.</p>
+                {% endif %}
+                {% endif %}
+            </div>
+
+            <div class="grid-2">
+                <div class="section-card">
+                    <h3 class="section-title">Direct Send Risk</h3>
+                    <p class="section-sub">Direct send cannot be definitively validated from DNS alone. A live SMTP probe provides the authoritative answer.</p>
+                    <div class="record-box">
+                        <strong>Status:</strong>
+                        {% if direct_send.status == "Likely Protected" %}
+                            <span class="badge badge-good">Likely Protected</span>
+                        {% elif direct_send.status == "Potential Exposure" %}
+                            <span class="badge badge-warn">Potential Exposure</span>
+                        {% elif direct_send.status == "At Risk" %}
+                            <span class="badge badge-bad">At Risk</span>
+                        {% else %}
+                            <span class="badge badge-warn">Unknown</span>
+                        {% endif %}
+                        <br><br>
+                        {{ direct_send.reason }}
+                        <br><br>
+                        <em>{{ direct_send.validation }}</em>
+                    </div>
+                </div>
+
+                <div class="section-card">
+                    <h3 class="section-title">Enhanced Filtering</h3>
+                    <p class="section-sub">Enhanced Filtering for Connectors helps Microsoft 365 preserve the original sender IP behind a gateway.</p>
+                    <div class="record-box">
+                        <strong>Status:</strong>
+                        {% if enhanced_filtering.status == "Not Observable (External)" %}
+                            <span class="badge badge-warn">Not Observable (External)</span>
+                        {% elif enhanced_filtering.status == "Not Applicable" %}
+                            <span class="badge badge-good">Not Applicable</span>
+                        {% else %}
+                            <span class="badge badge-warn">Unknown</span>
+                        {% endif %}
+                        <br><br>
+                        {{ enhanced_filtering.reason }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <h3 class="section-title">Recommended Fixes</h3>
+                <p class="section-sub">Suggested next steps based on the current posture.</p>
+                {% if recommended_fixes %}
+                <ul class="clean">
+                    {% for fix in recommended_fixes %}
+                    <li><span class="finding-warn">{{ fix }}</span></li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="finding-good">No immediate remediation recommendations.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Scan another domain -->
+        <div class="scan-another">
+            <div>
+                <strong>Analyze another domain</strong>
+                <p>Check any domain or email address for email security posture.</p>
+            </div>
+            <a href="/" class="btn-scan">← New Analysis</a>
+        </div>
+
+        <!-- Hidden report data for copy -->
+        <div id="report-data" style="display:none;">
+MailFlow Sentinel Report — {{ domain }}
+Generated: {{ report_date }}
+Score: {{ score }}/100 — {{ score_label }}
+
+SPF: {% if spf %}{{ spf }} ({{ spf_lookups }} lookups){% else %}Missing{% endif %}
+
+DMARC: {% if dmarc %}{{ dmarc }}{% else %}Missing{% endif %}
+
+DKIM: {% if dkim_present %}Detected ({{ dkim_signing_authority.authority }}){% else %}Not detected{% endif %}
+
+MX Records:
+{% for m in mx %}  {{ m }}
+{% endfor %}
+MTA-STS: {% if mta_sts_record %}Present{% else %}Missing{% endif %}
+TLS-RPT: {% if tls_rpt_record %}Present{% else %}Missing{% endif %}
+BIMI: {% if bimi_record %}Present{% else %}Not configured{% endif %}
+Direct Send: {{ direct_send.status }}
+
+{% if recommended_fixes %}Recommended Fixes:
+{% for fix in recommended_fixes %}  - {{ fix }}
+{% endfor %}{% else %}No immediate fixes recommended.{% endif %}
+
+Analyzed by mailflowsentinel.com
+        </div>
+
+        {% endif %}
+    </div>
+
+    <script>
+        function copyShareLink(btn) {
+            navigator.clipboard.writeText(window.location.href).then(() => {
+                btn.classList.add('copied');
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+                setTimeout(() => {
+                    btn.classList.remove('copied');
+                    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> Share Results';
+                }, 2000);
+            });
+        }
+
+        function copyReport(btn) {
+            const text = document.getElementById('report-data').innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                btn.classList.add('copied');
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+                setTimeout(() => {
+                    btn.classList.remove('copied');
+                    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy Report';
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>
