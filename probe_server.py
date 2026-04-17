@@ -385,3 +385,78 @@ def catchall(domain: str = Query(..., description="Domain to test for catch-all"
         result["error"] = str(e)
 
     return result
+
+
+@app.get("/subdomains")
+def subdomains(domain: str = Query(..., description="Domain to check mail subdomains")):
+    """
+    Test common mail-related subdomains for open SMTP ports and relay misconfiguration.
+    Subdomains like mail., smtp., webmail. are often forgotten and left misconfigured.
+    """
+    domain = domain.strip().lower()
+    prefixes = ["mail", "smtp", "webmail", "mx", "mx1", "mx2", "relay", "mailhost", "exchange"]
+    
+    results = []
+    
+    for prefix in prefixes:
+        subdomain = f"{prefix}.{domain}"
+        result = {
+            "subdomain": subdomain,
+            "resolves": False,
+            "smtp_open": False,
+            "banner": None,
+            "tls_version": None,
+            "open_relay": None,
+            "error": None,
+        }
+        
+        # Check if subdomain resolves
+        try:
+            dns.resolver.resolve(subdomain, "A")
+            result["resolves"] = True
+        except Exception:
+            results.append(result)
+            continue
+        
+        # Try SMTP connection
+        try:
+            sock, banner, ehlo_resp = smtp_connect(subdomain)
+            result["smtp_open"] = True
+            result["banner"] = banner.strip()
+            
+            if hasattr(sock, "version"):
+                result["tls_version"] = sock.version()
+            
+            # Quick relay test
+            sock.sendall(f"MAIL FROM:<{PROBE_FROM}>\r\n".encode())
+            mail_resp = sock.recv(1024).decode(errors="replace")
+            
+            if mail_resp.startswith("250"):
+                relay_to = "relay-check@mailflowsentinel-test.com"
+                sock.sendall(f"RCPT TO:<{relay_to}>\r\n".encode())
+                rcpt_resp = sock.recv(1024).decode(errors="replace")
+                code = int(rcpt_resp[:3]) if rcpt_resp[:3].isdigit() else None
+                result["open_relay"] = (code == 250)
+            
+            sock.sendall(b"QUIT\r\n")
+            sock.close()
+            
+        except socket.timeout:
+            result["error"] = "Timeout"
+        except Exception as e:
+            result["error"] = str(e)[:80]
+        
+        results.append(result)
+    
+    # Only return subdomains that resolve
+    found = [r for r in results if r["resolves"]]
+    open_relays = [r["subdomain"] for r in found if r["open_relay"]]
+    
+    return {
+        "domain": domain,
+        "subdomains_found": len(found),
+        "open_relays_found": len(open_relays),
+        "open_relay_hosts": open_relays,
+        "results": found,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
