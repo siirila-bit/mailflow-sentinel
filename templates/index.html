@@ -492,6 +492,174 @@
             .title { font-size: 24px; }
             .domain { font-size: 22px; }
         }
+
+        /* ============ PRINT / PDF STYLES ============ */
+        @media print {
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+            body {
+                background: #ffffff !important;
+                color: #1e293b !important;
+                font-size: 11pt;
+            }
+
+            .wrap { max-width: 100%; padding: 0; }
+
+            /* Hide interactive elements */
+            .search-card,
+            .action-row,
+            .scan-another,
+            .btn-action,
+            .btn-scan { display: none !important; }
+
+            /* Result card */
+            .result-card {
+                background: #ffffff !important;
+                border: 1px solid #e2e8f0 !important;
+                box-shadow: none !important;
+                border-radius: 12px !important;
+                padding: 16px !important;
+                margin-bottom: 16px !important;
+            }
+
+            .domain { color: #1e293b !important; font-size: 26pt !important; }
+
+            /* Score pill */
+            .risk-pill {
+                background: #f0fdf4 !important;
+                border: 1px solid #86efac !important;
+                color: #166534 !important;
+            }
+
+            .risk-medium { color: #854d0e !important; }
+            .risk-high { color: #991b1b !important; }
+
+            .score-note { color: #475569 !important; }
+
+            /* Badge row */
+            .badge-row { gap: 4px !important; }
+            .badge-group-label { color: #64748b !important; }
+
+            .badge {
+                border: 1px solid #e2e8f0 !important;
+                background: #f8fafc !important;
+                color: #1e293b !important;
+            }
+            .badge-good { background: #f0fdf4 !important; border-color: #86efac !important; color: #166534 !important; }
+            .badge-warn { background: #fefce8 !important; border-color: #fde047 !important; color: #854d0e !important; }
+            .badge-bad { background: #fef2f2 !important; border-color: #fca5a5 !important; color: #991b1b !important; }
+            .badge-vendor { background: #f5f3ff !important; border-color: #c4b5fd !important; color: #5b21b6 !important; }
+            .badge .dot { display: none; }
+
+            /* Overview grid */
+            .overview-grid {
+                grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+                gap: 8px !important;
+            }
+
+            .mini-card {
+                background: #f8fafc !important;
+                border: 1px solid #e2e8f0 !important;
+                box-shadow: none !important;
+                padding: 12px !important;
+            }
+
+            .mini-label { color: #64748b !important; }
+            .mini-value { color: #1e293b !important; font-size: 18pt !important; }
+            .mini-note { color: #64748b !important; }
+
+            /* Sections */
+            .sections { gap: 12px !important; }
+
+            .section-card {
+                background: #ffffff !important;
+                border: 1px solid #e2e8f0 !important;
+                box-shadow: none !important;
+                border-radius: 10px !important;
+                padding: 14px !important;
+                break-inside: avoid;
+            }
+
+            .section-title { color: #1e293b !important; font-size: 14pt !important; }
+            .section-sub { color: #64748b !important; }
+
+            .record-box, pre {
+                background: #f8fafc !important;
+                border: 1px solid #e2e8f0 !important;
+                border-radius: 8px !important;
+            }
+
+            code { color: #1e40af !important; }
+
+            .muted { color: #64748b !important; }
+
+            .finding-good {
+                background: #f0fdf4 !important;
+                border-color: #86efac !important;
+                color: #166534 !important;
+            }
+
+            .finding-warn {
+                background: #fefce8 !important;
+                border-color: #fde047 !important;
+                color: #854d0e !important;
+            }
+
+            .finding-bad {
+                background: #fef2f2 !important;
+                border-color: #fca5a5 !important;
+                color: #991b1b !important;
+            }
+
+            /* Fix wrapping in finding pills */
+            .finding-good, .finding-warn, .finding-bad {
+                white-space: nowrap !important;
+                display: inline-flex !important;
+            }
+
+            /* Darken strong/bold labels */
+            strong { color: #1e293b !important; }
+
+            /* Force single column in print for cleaner layout */
+            .grid-2 { grid-template-columns: 1fr !important; gap: 8px !important; }
+
+            /* Prevent text overflow */
+            .section-card, .mini-card, .record-box, pre {
+                overflow: hidden !important;
+                word-break: break-word !important;
+            }
+
+            /* Fix record box text wrapping */
+            code {
+                word-break: break-all !important;
+                white-space: pre-wrap !important;
+            }
+
+            /* Tighten up spacing for print */
+            .sections { gap: 8px !important; }
+            .section-card { margin-bottom: 0 !important; padding: 12px !important; }
+            .section-title { font-size: 13pt !important; margin-bottom: 6px !important; }
+            .section-sub { font-size: 10pt !important; margin-bottom: 8px !important; }
+
+            /* Page breaks */
+            .sections > * { break-inside: avoid; }
+
+            /* Print header */
+            .print-header { display: block !important; }
+
+            /* Title */
+            .title { color: #1e293b !important; font-size: 28pt !important; }
+            .title span { -webkit-text-fill-color: #1e40af !important; }
+            .subtitle { color: #64748b !important; }
+
+            /* Page setup */
+            @page {
+                size: letter;
+                margin: 0.6in 0.7in;
+            }
+        }
+
+        .print-header { display: none; }
     </style>
 </head>
 <body>
@@ -662,6 +830,10 @@
 
             <!-- Action buttons -->
             <div class="action-row">
+                <button class="btn-action" onclick="window.print()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                    Download PDF
+                </button>
                 <button class="btn-action" onclick="copyShareLink(this)">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
                     Share Results
