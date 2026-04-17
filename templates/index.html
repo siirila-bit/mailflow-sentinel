@@ -191,6 +191,7 @@
             align-items: center;
             gap: 6px;
             flex-wrap: wrap;
+            row-gap: 4px;
         }
 
         .badge-group-label {
@@ -313,6 +314,7 @@
             padding: 16px;
             color: var(--text);
             overflow-x: auto;
+            word-break: break-all;
         }
 
         code {
@@ -1047,7 +1049,9 @@
                         {% if catch_all.smtp_response %}
                         <br><br>
                         <strong>SMTP Response:</strong>
-                        <div style="margin-top: 6px;"><code class="muted" style="font-size:12px;">{{ catch_all.smtp_response }}</code></div>
+                        <div style="margin-top: 6px; max-height: 80px; overflow: hidden; position: relative;">
+                            <code class="muted" style="font-size:12px;">{{ catch_all.smtp_response[:120] }}{% if catch_all.smtp_response|length > 120 %}…{% endif %}</code>
+                        </div>
                         {% endif %}
                     </div>
                 </div>
