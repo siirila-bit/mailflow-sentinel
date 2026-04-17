@@ -857,20 +857,77 @@
                 </div>
 
                 <div class="section-card">
-                    <h3 class="section-title">Enhanced Filtering</h3>
-                    <p class="section-sub">Enhanced Filtering for Connectors helps Microsoft 365 preserve the original sender IP behind a gateway.</p>
+                    <h3 class="section-title">Catch-All Detection</h3>
+                    <p class="section-sub">A catch-all mail server accepts email sent to any address at the domain, even nonexistent ones. Attackers exploit this for email harvesting, phishing infrastructure, and BEC reconnaissance.</p>
                     <div class="record-box">
                         <strong>Status:</strong>
-                        {% if enhanced_filtering.status == "Not Observable (External)" %}
-                            <span class="badge badge-warn">Not Observable (External)</span>
-                        {% elif enhanced_filtering.status == "Not Applicable" %}
-                            <span class="badge badge-good">Not Applicable</span>
+                        {% if catch_all.status == "Catch-All Enabled" %}
+                            <span class="badge badge-bad">Catch-All Enabled</span>
+                        {% elif catch_all.status == "No Catch-All" %}
+                            <span class="badge badge-good">No Catch-All</span>
+                        {% elif catch_all.status == "Unavailable" %}
+                            <span class="badge badge-warn">Check Unavailable</span>
                         {% else %}
-                            <span class="badge badge-warn">Unknown</span>
+                            <span class="badge badge-warn">Inconclusive</span>
                         {% endif %}
                         <br><br>
-                        {{ enhanced_filtering.reason }}
+                        {{ catch_all.reason }}
+                        {% if catch_all.smtp_response %}
+                        <br><br>
+                        <strong>SMTP Response:</strong>
+                        <div style="margin-top: 6px;"><code class="muted" style="font-size:12px;">{{ catch_all.smtp_response }}</code></div>
+                        {% endif %}
                     </div>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <h3 class="section-title">Mail Server Fingerprint</h3>
+                <p class="section-sub">Information gathered from live SMTP connections to the domain's mail servers. Reveals software, TLS capabilities, and infrastructure details.</p>
+                <div class="record-box">
+                    {% if fingerprint.banners %}
+                    <div style="margin-bottom: 16px;">
+                        <strong>Server Banner:</strong>
+                        <div style="margin-top: 8px;">
+                            {% for banner in fingerprint.banners[:1] %}
+                            <code style="font-size:13px; color: #93c5fd;">{{ banner }}</code>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if fingerprint.tls_versions %}
+                    <div style="margin-bottom: 16px;">
+                        <strong>TLS Version:</strong>
+                        <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
+                            {% for tls in fingerprint.tls_versions %}
+                            {% if "TLSv1.3" in tls %}
+                                <span class="finding-good">{{ tls }} — Excellent</span>
+                            {% elif "TLSv1.2" in tls %}
+                                <span class="finding-good">{{ tls }} — Good</span>
+                            {% else %}
+                                <span class="finding-bad">{{ tls }} — Outdated</span>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if fingerprint.server_software %}
+                    <div style="margin-bottom: 16px;">
+                        <strong>Software Fingerprint:</strong>
+                        <div class="muted" style="margin-top: 6px;"><code>{{ fingerprint.server_software }}</code></div>
+                    </div>
+                    {% endif %}
+
+                    <div>
+                        <strong>Gateway Vendor:</strong>
+                        <div class="muted" style="margin-top: 6px;">{{ fingerprint.vendor }}</div>
+                    </div>
+
+                    {% if not fingerprint.banners %}
+                    <p class="muted">Fingerprint data unavailable — SMTP probe did not connect.</p>
+                    {% endif %}
                 </div>
             </div>
 
@@ -901,27 +958,47 @@
                         </div>
                     </div>
                     {% endif %}
-                    {% if open_relay.tls_versions %}
-                    <div style="margin-bottom: 10px;">
-                        <strong>TLS Version Detected:</strong>
-                        <div class="muted" style="margin-top: 6px;">
-                            {% for tls in open_relay.tls_versions %}
-                                <span class="{% if 'TLSv1.2' in tls or 'TLSv1.3' in tls %}finding-good{% else %}finding-warn{% endif %}" style="display:inline-flex;padding:4px 8px;border-radius:8px;font-size:13px;font-weight:600;">{{ tls }}</span>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% endif %}
-                    {% if open_relay.banners %}
-                    <div>
-                        <strong>Server Banner:</strong>
-                        <div style="margin-top: 6px;">
-                            {% for banner in open_relay.banners[:1] %}
-                                <code class="muted" style="font-size:12px;">{{ banner }}</code>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% endif %}
                 </div>
+            </div>
+
+            <div class="section-card">
+                <h3 class="section-title">Mail Subdomain Scan</h3>
+                <p class="section-sub">Checks common mail-related subdomains (mail., smtp., webmail., mx., relay.) for active SMTP servers. Forgotten subdomains are often left misconfigured and open to relay abuse.</p>
+                {% if subdomain_data.subdomains_found > 0 %}
+                <div class="record-box">
+                    <div style="margin-bottom: 14px;">
+                        <strong>Subdomains Found:</strong> {{ subdomain_data.subdomains_found }}
+                        {% if subdomain_data.open_relays_found > 0 %}
+                            <span class="badge badge-bad" style="margin-left: 10px;">{{ subdomain_data.open_relays_found }} Open Relay{% if subdomain_data.open_relays_found > 1 %}s{% endif %}</span>
+                        {% else %}
+                            <span class="badge badge-good" style="margin-left: 10px;">No Open Relays</span>
+                        {% endif %}
+                    </div>
+                    {% for sub in subdomain_data.results %}
+                    <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px;">
+                            <code style="color: #93c5fd;">{{ sub.subdomain }}</code>
+                            {% if sub.open_relay %}
+                                <span class="finding-bad">Open Relay</span>
+                            {% elif sub.smtp_open %}
+                                <span class="finding-good">SMTP Active</span>
+                            {% endif %}
+                            {% if sub.tls_version %}
+                                <span class="finding-good" style="font-size:11px;">{{ sub.tls_version }}</span>
+                            {% endif %}
+                        </div>
+                        {% if sub.banner %}
+                        <div class="muted" style="font-size: 12px;"><code>{{ sub.banner[:100] }}</code></div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="record-box">
+                    <span class="finding-good">No common mail subdomains found.</span>
+                    <div class="muted" style="margin-top: 8px;">Checked: mail, smtp, webmail, mx, mx1, mx2, relay, mailhost, exchange</div>
+                </div>
+                {% endif %}
             </div>
 
             <div class="section-card">

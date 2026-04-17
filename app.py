@@ -1,5 +1,9 @@
 from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse
 from fastapi.templating import Jinja2Templates
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import dns.resolver
 import urllib.request
 import urllib.parse
@@ -9,7 +13,10 @@ from datetime import datetime, timezone
 
 PROBE_URL = "http://144.202.103.114:8001/probe"
 
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 templates = Jinja2Templates(directory="templates")
 
 
@@ -306,27 +313,29 @@ def evaluate_direct_send(domain, vendor, mx_records, dmarc, msft_dkim):
         }
 
 
-def evaluate_enhanced_filtering(vendor, mx_records):
-    mx_string = " ".join(mx_records).lower()
-    is_microsoft = "mail.protection.outlook.com" in mx_string
-    gateway_vendors = ["barracuda", "proofpoint", "mimecast"]
-    has_gateway = any(v in vendor.lower() for v in gateway_vendors)
-
-    if has_gateway and is_microsoft:
+def evaluate_catch_all(domain: str) -> dict:
+    try:
+        url = f"http://144.202.103.114:8001/catchall?domain={urllib.parse.quote(domain)}"
+        with urllib.request.urlopen(url, timeout=15) as resp:
+            data = json.loads(resp.read().decode())
         return {
-            "status": "Not Observable (External)",
-            "reason": (
-                "Enhanced Filtering cannot be verified via DNS. This requires validation inside Microsoft 365 connectors. "
-                "If not configured, Microsoft 365 may evaluate mail using the gateway IP instead of the true sender."
-            ),
+            "status": data.get("status", "Unknown"),
+            "reason": data.get("reason", ""),
+            "smtp_code": data.get("smtp_code"),
+            "smtp_response": data.get("smtp_response", ""),
+            "mx_tested": data.get("mx_tested", ""),
         }
-    elif is_microsoft and not has_gateway:
-        return {"status": "Not Applicable", "reason": "Mail appears to be delivered directly to Microsoft 365."}
-    else:
-        return {"status": "Not Applicable", "reason": "No gateway-plus-Microsoft pattern was detected from external DNS."}
+    except Exception:
+        return {
+            "status": "Unavailable",
+            "reason": "Catch-all check unavailable.",
+            "smtp_code": None,
+            "smtp_response": "",
+            "mx_tested": "",
+        }
 
 
-def generate_recommendations(spf, dmarc, mta_sts_record, tls_rpt_record, direct_send, enhanced_filtering, msft_dkim):
+def generate_recommendations(spf, dmarc, mta_sts_record, tls_rpt_record, direct_send, catch_all, msft_dkim):
     fixes = []
     if not spf:
         fixes.append("Add an SPF record to define authorized sending sources.")
@@ -344,8 +353,8 @@ def generate_recommendations(spf, dmarc, mta_sts_record, tls_rpt_record, direct_
         fixes.append("Restrict Microsoft 365 so it only accepts mail from approved gateway or connector sources.")
     if direct_send["status"] == "Potential Exposure":
         fixes.append("Validate direct send exposure with a live SMTP probe against the Microsoft 365 endpoint.")
-    if enhanced_filtering["status"] == "Not Observable (External)":
-        fixes.append("Validate Microsoft 365 connector configuration and Enhanced Filtering settings internally.")
+    if catch_all["status"] == "Catch-All Enabled":
+        fixes.append("Disable catch-all to prevent email harvesting and reduce spam exposure.")
     return fixes
 
 
@@ -390,7 +399,7 @@ def build_score_summary(score, spf, dmarc, dkim_present, mta_sts_record, direct_
         return "High risk. This domain is vulnerable to spoofing: " + (", ".join(critical) + "." if critical else "multiple critical controls missing.")
 
 
-def calculate_score(spf, dmarc, spf_lookups, mta_sts_record, tls_rpt_record, direct_send_status, msft_dkim):
+def calculate_score(spf, dmarc, spf_lookups, mta_sts_record, tls_rpt_record, direct_send_status, msft_dkim, catch_all_status):
     score = 100
     findings = []
 
@@ -430,6 +439,10 @@ def calculate_score(spf, dmarc, spf_lookups, mta_sts_record, tls_rpt_record, dir
         score -= 4
         findings.append("TLS-RPT record missing")
 
+    if catch_all_status == "Catch-All Enabled":
+        score -= 10
+        findings.append("Catch-all enabled — domain accepts email to any address")
+
     score = max(score, 0)
 
     if score >= 85:
@@ -445,12 +458,18 @@ def calculate_score(spf, dmarc, spf_lookups, mta_sts_record, tls_rpt_record, dir
     return score, risk_level, score_label, findings
 
 
+@app.get("/robots.txt")
+def robots():
+    return FileResponse("/opt/mailflow/robots.txt")
+
+
 @app.get("/")
 def home(request: Request):
     return templates.TemplateResponse(request=request, name="index.html", context={})
 
 
 @app.get("/analyze")
+@limiter.limit("10/minute")
 def analyze(request: Request, domain: str):
     original_input = domain
     domain = extract_domain(domain)
@@ -472,7 +491,7 @@ def analyze(request: Request, domain: str):
     mta_sts_policy = check_mta_sts_policy(domain)
 
     direct_send = evaluate_direct_send(domain, vendor, mx, dmarc, msft_dkim)
-    enhanced_filtering = evaluate_enhanced_filtering(vendor, mx)
+    catch_all = evaluate_catch_all(domain)
 
     # Open relay check via probe
     open_relay = {"status": "Unknown", "reason": "", "mx_tested": [], "tls_versions": [], "banners": []}
@@ -494,15 +513,44 @@ def analyze(request: Request, domain: str):
 
     recommended_fixes = generate_recommendations(
         spf, dmarc, mta_sts_record, tls_rpt_record,
-        direct_send, enhanced_filtering, msft_dkim,
+        direct_send, catch_all, msft_dkim,
     )
 
     if open_relay["status"] == "Open Relay":
         recommended_fixes.insert(0, "CRITICAL: Open relay detected — your mail server will forward email for anyone. Restrict relay immediately.")
 
+    # Subdomain check
+    subdomain_data = {"subdomains_found": 0, "open_relays_found": 0, "open_relay_hosts": [], "results": []}
+    try:
+        sub_url = f"http://144.202.103.114:8001/subdomains?domain={urllib.parse.quote(domain)}"
+        with urllib.request.urlopen(sub_url, timeout=30) as resp:
+            subdomain_data = json.loads(resp.read().decode())
+        if subdomain_data.get("open_relays_found", 0) > 0:
+            recommended_fixes.insert(0, f"CRITICAL: Open relay detected on mail subdomain(s): {', '.join(subdomain_data['open_relay_hosts'])}. Restrict relay immediately.")
+    except Exception:
+        pass
+
+    # Build mail server fingerprint from open relay probe data
+    fingerprint = {
+        "banners": open_relay.get("banners", []),
+        "tls_versions": open_relay.get("tls_versions", []),
+        "mx_hosts": open_relay.get("mx_tested", []),
+        "vendor": vendor,
+    }
+    # Parse banner for software info
+    fingerprint["server_software"] = ""
+    if fingerprint["banners"]:
+        banner = fingerprint["banners"][0]
+        # Extract software name from banner (after ESMTP or SMTP)
+        import re
+        match = re.search(r'(?:ESMTP|SMTP)\s+([^\s(]+)', banner, re.IGNORECASE)
+        if match:
+            fingerprint["server_software"] = match.group(1)
+    fingerprint["tls_secure"] = all("TLSv1.2" in t or "TLSv1.3" in t for t in fingerprint["tls_versions"]) if fingerprint["tls_versions"] else None
+
     score, risk_level, score_label, findings = calculate_score(
         spf, dmarc, spf_lookups, mta_sts_record,
-        tls_rpt_record, direct_send["status"], msft_dkim,
+        tls_rpt_record, direct_send["status"], msft_dkim, catch_all["status"],
     )
 
     score_summary = build_score_summary(
@@ -531,7 +579,7 @@ def analyze(request: Request, domain: str):
             "tls_rpt_record": tls_rpt_record,
             "mta_sts_policy": mta_sts_policy,
             "direct_send": direct_send,
-            "enhanced_filtering": enhanced_filtering,
+            "catch_all": catch_all,
             "recommended_fixes": recommended_fixes,
             "score": score,
             "risk_level": risk_level,
@@ -540,5 +588,7 @@ def analyze(request: Request, domain: str):
             "score_summary": score_summary,
             "report_date": report_date,
             "open_relay": open_relay,
+            "fingerprint": fingerprint,
+            "subdomain_data": subdomain_data,
         }
     )
