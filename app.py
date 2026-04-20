@@ -9,6 +9,8 @@ import urllib.request
 import urllib.parse
 import ssl
 import json
+import asyncio
+import httpx
 from datetime import datetime, timezone
 
 PROBE_URL = "http://144.202.103.114:8001/probe"
@@ -216,6 +218,105 @@ def detect_vendor(mx_records):
     return "Unknown"
 
 
+def get_cname(name: str) -> str | None:
+    try:
+        answers = dns.resolver.resolve(name, "CNAME")
+        return str(answers[0].target).rstrip(".")
+    except Exception:
+        return None
+
+
+ESP_DEFS = [
+    {
+        "name": "SendGrid",
+        "spf": ["sendgrid.net"],
+        "cname": ["sendgrid.net"],
+        "selectors": ["s1", "s2"],
+    },
+    {
+        "name": "Mailchimp",
+        "spf": ["servers.mcsv.net", "spf.mandrillapp.com"],
+        "cname": ["mcsv.net", "mcdlv.net", "list-manage.com", "mandrillapp.com"],
+        "selectors": ["k1", "k2"],
+    },
+    {
+        "name": "HubSpot",
+        "spf": ["_spf.hubspot.com"],
+        "cname": ["hubspot.com", "hubspotemail.net"],
+        "selectors": ["hs1", "hs2"],
+    },
+    {
+        "name": "Klaviyo",
+        "spf": ["klaviyo.com"],
+        "cname": ["klaviyo.com"],
+        "selectors": ["pd"],
+    },
+    {
+        "name": "Constant Contact",
+        "spf": ["spf.constantcontact.com"],
+        "cname": ["constantcontact.com", "isnotspam.com"],
+        "selectors": [],
+    },
+    {
+        "name": "Brevo",
+        "spf": ["sendinblue.com", "mail.sendinblue.com"],
+        "cname": ["sendinblue.com", "brevo.com"],
+        "selectors": ["mail"],
+    },
+    {
+        "name": "Postmark",
+        "spf": ["spf.mtasv.net"],
+        "cname": ["mtasv.net"],
+        "selectors": ["pm"],
+    },
+    {
+        "name": "Salesforce Marketing Cloud",
+        "spf": ["exacttarget.com", "cust-spf.exacttarget.com"],
+        "cname": ["exacttarget.com", "s.exacttarget.com"],
+        "selectors": [],
+    },
+]
+
+
+def detect_email_senders(domain: str, spf: str | None) -> list[dict]:
+    detected: dict[str, dict] = {}
+
+    # Check SPF includes
+    if spf:
+        spf_lower = spf.lower()
+        for esp in ESP_DEFS:
+            for inc in esp["spf"]:
+                if inc in spf_lower:
+                    detected.setdefault(esp["name"], {"name": esp["name"], "signals": []})
+                    detected[esp["name"]]["signals"].append(f"SPF include:{inc}")
+                    break
+
+    # Check DKIM selectors for CNAMEs pointing to known ESP infrastructure
+    for esp in ESP_DEFS:
+        for selector in esp["selectors"]:
+            cname = get_cname(f"{selector}._domainkey.{domain}")
+            if cname and any(t in cname for t in esp["cname"]):
+                detected.setdefault(esp["name"], {"name": esp["name"], "signals": []})
+                detected[esp["name"]]["signals"].append(
+                    f"DKIM CNAME {selector}._domainkey.{domain} → {cname}"
+                )
+
+    # Check common tracking/sending subdomains for CNAMEs
+    tracking_subs = ["em", "em1", "em2", "email", "bounce", "click", "track", "links", "news", "go", "sg", "hub"]
+    for sub in tracking_subs:
+        cname = get_cname(f"{sub}.{domain}")
+        if not cname:
+            continue
+        for esp in ESP_DEFS:
+            if any(t in cname for t in esp["cname"]):
+                detected.setdefault(esp["name"], {"name": esp["name"], "signals": []})
+                signal = f"CNAME {sub}.{domain} → {cname}"
+                if signal not in detected[esp["name"]]["signals"]:
+                    detected[esp["name"]]["signals"].append(signal)
+
+    return list(detected.values())
+
+
 def get_mta_sts_dns(domain: str):
     records = get_txt_records(f"_mta-sts.{domain}")
     for record in records:
@@ -245,7 +346,7 @@ def check_mta_sts_policy(domain: str):
         return {"found": False, "url": url, "body": None}
 
 
-def evaluate_direct_send(domain, vendor, mx_records, dmarc, msft_dkim):
+async def evaluate_direct_send(domain, vendor, mx_records, dmarc, msft_dkim, email_senders=None):
     """
     Hybrid direct send evaluation:
     1. DNS inference as primary signal
@@ -273,11 +374,27 @@ def evaluate_direct_send(domain, vendor, mx_records, dmarc, msft_dkim):
         dns_status = "Unknown"
         dns_reason = "Unable to determine direct send exposure from DNS alone."
 
+    # When M365 is the inbound handler and ESPs are detected, note the outbound/inbound split.
+    # ESPs handle outbound only — they have no bearing on whether M365's inbound MX
+    # can be reached directly by an unauthenticated sender.
+    esp_context = None
+    if is_microsoft and email_senders:
+        esp_names = [e["name"] for e in email_senders]
+        names_str = ", ".join(esp_names)
+        esp_context = (
+            f"Outbound mail appears split: {names_str} "
+            f"{'handles' if len(esp_names) == 1 else 'handle'} outbound sending while "
+            "Microsoft 365 handles inbound. ESP configuration does not reduce direct send "
+            "bypass risk — an attacker can still deliver spoofed mail directly to the M365 "
+            "MX endpoint, bypassing the outbound ESP entirely."
+        )
+
     # Try live probe for confirmation
     try:
         url = f"{PROBE_URL}?domain={urllib.parse.quote(domain)}"
-        with urllib.request.urlopen(url, timeout=12) as resp:
-            data = json.loads(resp.read().decode())
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, timeout=12)
+            data = resp.json()
 
         probe_status = data.get("status", "Unknown")
         smtp_response = data.get("smtp_response", "")
@@ -290,6 +407,7 @@ def evaluate_direct_send(domain, vendor, mx_records, dmarc, msft_dkim):
                 "reason": dns_reason,
                 "validation": f"Live SMTP probe confirmed connector-level block: {smtp_response[:120] if smtp_response else '5.7.68 TenantInboundAttribution'}",
                 "probe": "confirmed",
+                "esp_context": esp_context,
             }
 
         # 250 from probe is inconclusive — transport rules may still block post-DATA
@@ -300,6 +418,7 @@ def evaluate_direct_send(domain, vendor, mx_records, dmarc, msft_dkim):
             "reason": dns_reason,
             "validation": "Live SMTP probe returned 250 at RCPT TO. Note: transport rule-based blocking is not detectable externally — full protection may still be in place internally.",
             "probe": "dns_primary",
+            "esp_context": esp_context,
         }
 
     except Exception:
@@ -310,14 +429,16 @@ def evaluate_direct_send(domain, vendor, mx_records, dmarc, msft_dkim):
             "reason": dns_reason,
             "validation": "DNS inference only. A live SMTP probe provides additional confirmation.",
             "probe": "dns",
+            "esp_context": esp_context,
         }
 
 
-def evaluate_catch_all(domain: str) -> dict:
+async def evaluate_catch_all(domain: str) -> dict:
     try:
         url = f"http://144.202.103.114:8001/catchall?domain={urllib.parse.quote(domain)}"
-        with urllib.request.urlopen(url, timeout=15) as resp:
-            data = json.loads(resp.read().decode())
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, timeout=15)
+            data = resp.json()
         return {
             "status": data.get("status", "Unknown"),
             "reason": data.get("reason", ""),
@@ -333,6 +454,37 @@ def evaluate_catch_all(domain: str) -> dict:
             "smtp_response": "",
             "mx_tested": "",
         }
+
+
+async def probe_open_relay(domain: str) -> dict:
+    result = {"status": "Unknown", "reason": "", "mx_tested": [], "tls_versions": [], "banners": []}
+    try:
+        relay_url = f"http://144.202.103.114:8001/relay?domain={urllib.parse.quote(domain)}"
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(relay_url, timeout=20)
+            relay_data = resp.json()
+        result["status"] = relay_data.get("status", "Unknown")
+        result["reason"] = relay_data.get("reason", "")
+        result["mx_tested"] = relay_data.get("mx_tested", [])
+        for r in relay_data.get("results", []):
+            if r.get("tls_version"):
+                result["tls_versions"].append(r["tls_version"])
+            if r.get("banner"):
+                result["banners"].append(r["banner"])
+    except Exception:
+        result["status"] = "Unavailable"
+        result["reason"] = "Open relay check unavailable."
+    return result
+
+
+async def probe_subdomains(domain: str) -> dict:
+    try:
+        sub_url = f"http://144.202.103.114:8001/subdomains?domain={urllib.parse.quote(domain)}"
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(sub_url, timeout=10)
+            return resp.json()
+    except Exception:
+        return {"subdomains_found": 0, "open_relays_found": 0, "open_relay_hosts": [], "results": []}
 
 
 def generate_recommendations(spf, dmarc, mta_sts_record, tls_rpt_record, direct_send, catch_all, msft_dkim):
@@ -470,7 +622,7 @@ def home(request: Request):
 
 @app.get("/analyze")
 @limiter.limit("10/minute")
-def analyze(request: Request, domain: str):
+async def analyze(request: Request, domain: str):
     original_input = domain
     domain = extract_domain(domain)
 
@@ -486,30 +638,17 @@ def analyze(request: Request, domain: str):
     dkim_signing_authority = infer_dkim_signing_authority(vendor, dkim_results, msft_dkim)
 
     spf_lookups = count_spf_lookups(spf)
+    email_senders = detect_email_senders(domain, spf)
     mta_sts_record = get_mta_sts_dns(domain)
     tls_rpt_record = get_tls_rpt(domain)
     mta_sts_policy = check_mta_sts_policy(domain)
 
-    direct_send = evaluate_direct_send(domain, vendor, mx, dmarc, msft_dkim)
-    catch_all = evaluate_catch_all(domain)
-
-    # Open relay check via probe
-    open_relay = {"status": "Unknown", "reason": "", "mx_tested": [], "tls_versions": [], "banners": []}
-    try:
-        relay_url = f"http://144.202.103.114:8001/relay?domain={urllib.parse.quote(domain)}"
-        with urllib.request.urlopen(relay_url, timeout=20) as resp:
-            relay_data = json.loads(resp.read().decode())
-        open_relay["status"] = relay_data.get("status", "Unknown")
-        open_relay["reason"] = relay_data.get("reason", "")
-        open_relay["mx_tested"] = relay_data.get("mx_tested", [])
-        for r in relay_data.get("results", []):
-            if r.get("tls_version"):
-                open_relay["tls_versions"].append(r["tls_version"])
-            if r.get("banner"):
-                open_relay["banners"].append(r["banner"])
-    except Exception:
-        open_relay["status"] = "Unavailable"
-        open_relay["reason"] = "Open relay check unavailable."
+    direct_send, catch_all, open_relay, subdomain_data = await asyncio.gather(
+        evaluate_direct_send(domain, vendor, mx, dmarc, msft_dkim, email_senders),
+        evaluate_catch_all(domain),
+        probe_open_relay(domain),
+        probe_subdomains(domain),
+    )
 
     recommended_fixes = generate_recommendations(
         spf, dmarc, mta_sts_record, tls_rpt_record,
@@ -519,16 +658,8 @@ def analyze(request: Request, domain: str):
     if open_relay["status"] == "Open Relay":
         recommended_fixes.insert(0, "CRITICAL: Open relay detected — your mail server will forward email for anyone. Restrict relay immediately.")
 
-    # Subdomain check
-    subdomain_data = {"subdomains_found": 0, "open_relays_found": 0, "open_relay_hosts": [], "results": []}
-    try:
-        sub_url = f"http://144.202.103.114:8001/subdomains?domain={urllib.parse.quote(domain)}"
-        with urllib.request.urlopen(sub_url, timeout=30) as resp:
-            subdomain_data = json.loads(resp.read().decode())
-        if subdomain_data.get("open_relays_found", 0) > 0:
-            recommended_fixes.insert(0, f"CRITICAL: Open relay detected on mail subdomain(s): {', '.join(subdomain_data['open_relay_hosts'])}. Restrict relay immediately.")
-    except Exception:
-        pass
+    if subdomain_data.get("open_relays_found", 0) > 0:
+        recommended_fixes.insert(0, f"CRITICAL: Open relay detected on mail subdomain(s): {', '.join(subdomain_data['open_relay_hosts'])}. Restrict relay immediately.")
 
     # Build mail server fingerprint from open relay probe data
     fingerprint = {
@@ -541,7 +672,6 @@ def analyze(request: Request, domain: str):
     fingerprint["server_software"] = ""
     if fingerprint["banners"]:
         banner = fingerprint["banners"][0]
-        # Extract software name from banner (after ESMTP or SMTP)
         import re
         match = re.search(r'(?:ESMTP|SMTP)\s+([^\s(]+)', banner, re.IGNORECASE)
         if match:
@@ -590,5 +720,6 @@ def analyze(request: Request, domain: str):
             "open_relay": open_relay,
             "fingerprint": fingerprint,
             "subdomain_data": subdomain_data,
+            "email_senders": email_senders,
         }
     )

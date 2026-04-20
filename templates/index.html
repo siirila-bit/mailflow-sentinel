@@ -315,6 +315,7 @@
             color: var(--text);
             overflow-x: auto;
             word-break: break-all;
+            word-break: break-all;
         }
 
         code {
@@ -1008,6 +1009,30 @@
                 {% endif %}
             </div>
 
+            <!-- Third-Party Email Senders -->
+            <div class="section-card">
+                <h3 class="section-title">Third-Party Email Senders</h3>
+                <p class="section-sub">Sending tools detected via DNS — SPF <code>include:</code> directives, DKIM selector CNAMEs, and tracking subdomain CNAMEs.</p>
+                {% if email_senders %}
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    {% for esp in email_senders %}
+                    <div style="padding: 14px 16px; border-radius: 14px; background: rgba(124, 92, 255, 0.07); border: 1px solid rgba(124, 92, 255, 0.18);">
+                        <div style="margin-bottom: 10px;">
+                            <span class="badge badge-vendor" style="font-size: 13px; padding: 6px 12px;">{{ esp.name }}</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 5px;">
+                            {% for signal in esp.signals %}
+                            <div style="font-size: 12px; color: var(--muted);"><code>{{ signal }}</code></div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="muted">No third-party email senders detected from DNS signals.</p>
+                {% endif %}
+            </div>
+
             <div class="grid-2">
                 <div class="section-card">
                     <h3 class="section-title">Direct Send Risk</h3>
@@ -1027,6 +1052,13 @@
                         {{ direct_send.reason }}
                         <br><br>
                         <em>{{ direct_send.validation }}</em>
+                        {% if direct_send.esp_context %}
+                        <br><br>
+                        <div style="margin-top: 4px; padding: 10px 12px; border-radius: 10px; background: rgba(240, 179, 74, 0.08); border: 1px solid rgba(240, 179, 74, 0.22);">
+                            <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--warn);">Outbound / Inbound Split Detected</span>
+                            <div style="margin-top: 6px; font-size: 13px; color: var(--muted); line-height: 1.5;">{{ direct_send.esp_context }}</div>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
 
@@ -1212,6 +1244,8 @@ SPF: {% if spf %}{{ spf }} ({{ spf_lookups }} lookups){% else %}Missing{% endif 
 DMARC: {% if dmarc %}{{ dmarc }}{% else %}Missing{% endif %}
 
 DKIM: {% if dkim_present %}Detected ({{ dkim_signing_authority.authority }}){% else %}Not detected{% endif %}
+
+Third-Party Senders: {% if email_senders %}{% for esp in email_senders %}{{ esp.name }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}None detected{% endif %}
 
 MX Records:
 {% for m in mx %}  {{ m }}
