@@ -30,12 +30,15 @@
                 linear-gradient(180deg, #09101c 0%, #0b1020 100%);
             color: var(--text);
             min-height: 100vh;
+            max-width: 100%;
         }
 
         .wrap {
             max-width: 1180px;
             margin: 0 auto;
             padding: 36px 20px 60px;
+            width: 100%;
+            overflow-x: hidden;
         }
 
         .header-row {
@@ -146,6 +149,8 @@
             font-size: 36px;
             font-weight: 800;
             letter-spacing: -0.03em;
+            overflow-wrap: break-word;
+            min-width: 0;
         }
 
         .score-wrap {
@@ -283,6 +288,7 @@
             font-size: 28px;
             font-weight: 800;
             margin-bottom: 8px;
+            overflow-wrap: break-word;
         }
 
         .mini-note { color: var(--muted); font-size: 14px; }
@@ -292,6 +298,7 @@
         .section-card {
             border-radius: 20px;
             padding: 22px;
+            overflow-x: hidden;
         }
 
         .section-title {
@@ -314,8 +321,13 @@
             padding: 16px;
             color: var(--text);
             overflow-x: auto;
-            word-break: break-all;
-            word-break: break-all;
+            overflow-wrap: break-word;
+        }
+
+        .record-box code {
+            display: block;
+            white-space: pre;
+            overflow-wrap: normal;
         }
 
         code {
@@ -350,6 +362,9 @@
             border-radius: 999px;
             font-weight: 700;
             font-size: 13px;
+            max-width: 100%;
+            overflow-wrap: break-word;
+            white-space: normal;
         }
 
         .finding-good {
@@ -460,7 +475,7 @@
         }
 
         @media (max-width: 768px) {
-            .wrap { padding: 20px 14px 40px; }
+            .wrap { padding: 20px 16px 40px; }
             .title { font-size: 28px; }
             .subtitle { font-size: 14px; }
             .search-card { padding: 14px; border-radius: 16px; }
@@ -484,7 +499,8 @@
             .section-title { font-size: 20px; }
             .section-sub { font-size: 14px; }
             .action-row { flex-direction: column; gap: 8px; }
-            .btn-action { width: 100%; justify-content: center; }
+            .btn-action { width: 100%; justify-content: center; min-height: 44px; }
+            .btn-smtp-trace { padding: 8px 14px; font-size: 13px; min-height: 36px; margin-left: 0; margin-top: 8px; display: flex; }
             .scan-another { flex-direction: column; align-items: flex-start; gap: 14px; }
             .btn-scan { width: 100%; text-align: center; }
             .record-box, pre { font-size: 13px; padding: 12px; }
@@ -494,6 +510,8 @@
             .overview-grid { grid-template-columns: 1fr; }
             .title { font-size: 24px; }
             .domain { font-size: 22px; }
+            .mini-value { font-size: 20px; }
+            .badge-group-label { min-width: 72px; font-size: 10px; }
         }
 
         /* ============ PRINT / PDF STYLES ============ */
@@ -663,6 +681,88 @@
         }
 
         .print-header { display: none; }
+
+        .btn-smtp-trace {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.05);
+            color: var(--muted);
+            margin-left: 8px;
+            vertical-align: middle;
+            transition: background 0.2s, color 0.2s;
+        }
+        .btn-smtp-trace:hover { background: rgba(255,255,255,0.09); color: var(--text); }
+        .smtp-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.65);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .smtp-modal-overlay.open { display: flex; }
+        .smtp-modal-box {
+            background: #111827;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            width: 100%;
+            max-width: 640px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+        }
+        .smtp-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .smtp-modal-close {
+            background: none;
+            border: none;
+            color: var(--muted);
+            font-size: 22px;
+            cursor: pointer;
+            line-height: 1;
+            padding: 0 2px;
+        }
+        .smtp-modal-close:hover { color: var(--text); }
+        .smtp-modal-host { font-size: 12px; color: var(--muted); margin-bottom: 18px; font-family: monospace; }
+        .smtp-trace-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .smtp-trace-table th {
+            text-align: left;
+            color: var(--muted);
+            font-weight: 600;
+            padding: 6px 10px;
+            border-bottom: 1px solid var(--border);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+        }
+        .smtp-trace-table td {
+            padding: 9px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            color: var(--text);
+            vertical-align: top;
+        }
+        .smtp-trace-table td:nth-child(2) { font-family: monospace; color: var(--muted); white-space: nowrap; }
+        .smtp-trace-table td:nth-child(3) { font-family: monospace; font-size: 12px; word-break: break-word; color: var(--muted); }
+        .smtp-trace-table tr:last-child td { border-bottom: none; }
     </style>
 </head>
 <body>
@@ -756,11 +856,9 @@
                         <div class="badge-group">
                             <span class="badge-group-label">Protection</span>
 
-                            {% if direct_send.status == "Likely Protected" %}
+                            {% if direct_send.status == "Protected" %}
                                 <span class="badge badge-good"><span class="dot"></span>Direct Send</span>
-                            {% elif direct_send.status == "Potential Exposure" %}
-                                <span class="badge badge-warn"><span class="dot"></span>Direct Send</span>
-                            {% elif direct_send.status == "At Risk" %}
+                            {% elif direct_send.status == "Not Protected" %}
                                 <span class="badge badge-bad"><span class="dot"></span>Direct Send</span>
                             {% else %}
                                 <span class="badge badge-warn"><span class="dot"></span>Direct Send</span>
@@ -822,9 +920,8 @@
                 <div class="mini-card">
                     <div class="mini-label">Direct Send</div>
                     <div class="mini-value">
-                        {% if direct_send.status == "Likely Protected" %}Low Risk
-                        {% elif direct_send.status == "Potential Exposure" %}Review
-                        {% elif direct_send.status == "At Risk" %}Risk
+                        {% if direct_send.status == "Protected" %}Protected
+                        {% elif direct_send.status == "Not Protected" %}Not Protected
                         {% else %}Unknown{% endif %}
                     </div>
                     <div class="mini-note">{{ direct_send.reason }}</div>
@@ -1036,28 +1133,27 @@
             <div class="grid-2">
                 <div class="section-card">
                     <h3 class="section-title">Direct Send Risk</h3>
-                    <p class="section-sub">Direct send cannot be definitively validated from DNS alone. A live SMTP probe provides the authoritative answer.</p>
+                    <p class="section-sub">Tests whether Microsoft 365 can be reached directly by an external sender without connector enforcement.</p>
                     <div class="record-box">
                         <strong>Status:</strong>
-                        {% if direct_send.status == "Likely Protected" %}
-                            <span class="badge badge-good">Likely Protected</span>
-                        {% elif direct_send.status == "Potential Exposure" %}
-                            <span class="badge badge-warn">Potential Exposure</span>
-                        {% elif direct_send.status == "At Risk" %}
-                            <span class="badge badge-bad">At Risk</span>
+                        {% if direct_send.status == "Protected" %}
+                            <span class="badge badge-good">Protected</span>
+                        {% elif direct_send.status == "Not Protected" %}
+                            <span class="badge badge-bad">Not Protected</span>
                         {% else %}
                             <span class="badge badge-warn">Unknown</span>
                         {% endif %}
+                        {% if direct_send.probe_detail %}
+                            <button class="btn-smtp-trace" onclick="openSmtpModal()">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                                SMTP Trace
+                            </button>
+                        {% endif %}
                         <br><br>
                         {{ direct_send.reason }}
+                        {% if direct_send.validation %}
                         <br><br>
-                        <em>{{ direct_send.validation }}</em>
-                        {% if direct_send.esp_context %}
-                        <br><br>
-                        <div style="margin-top: 4px; padding: 10px 12px; border-radius: 10px; background: rgba(240, 179, 74, 0.08); border: 1px solid rgba(240, 179, 74, 0.22);">
-                            <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--warn);">Outbound / Inbound Split Detected</span>
-                            <div style="margin-top: 6px; font-size: 13px; color: var(--muted); line-height: 1.5;">{{ direct_send.esp_context }}</div>
-                        </div>
+                        <em style="font-size: 13px; color: var(--muted);">{{ direct_send.validation }}</em>
                         {% endif %}
                     </div>
                 </div>
@@ -1288,11 +1384,50 @@ Analyzed by mailflowsentinel.com
                 }, 2000);
             });
         }
+
+        function openSmtpModal() {
+            document.getElementById('smtp-modal').classList.add('open');
+        }
+        function closeSmtpModal(e) {
+            if (!e || e.target === document.getElementById('smtp-modal')) {
+                document.getElementById('smtp-modal').classList.remove('open');
+            }
+        }
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeSmtpModal();
+        });
     </script>
 
     <div style="text-align: center; padding: 20px 0 40px; color: rgba(149,163,191,0.4); font-size: 13px; font-family: Inter, sans-serif;">
         Built by Ray Siirila &nbsp;&middot;&nbsp; <a href="https://mailflowsentinel.com" style="color: rgba(90,169,255,0.4); text-decoration: none;">mailflowsentinel.com</a>
     </div>
+
+
+    {% if direct_send is defined %}
+    <div id="smtp-modal" class="smtp-modal-overlay" onclick="closeSmtpModal(event)">
+        <div class="smtp-modal-box">
+            <div class="smtp-modal-header">
+                <span>SMTP Probe Trace</span>
+                <button class="smtp-modal-close" onclick="closeSmtpModal()">&times;</button>
+            </div>
+            {% if direct_send.probe_detail %}
+            <div class="smtp-modal-host">Target: {{ direct_send.probe_detail.host or "—" }}</div>
+            <table class="smtp-trace-table">
+                <thead><tr><th>Stage</th><th>Code</th><th>Response</th></tr></thead>
+                <tbody>
+                    {% for row in direct_send.probe_detail.stages %}
+                    <tr>
+                        <td>{{ row.stage }}</td>
+                        <td>{{ row.code }}</td>
+                        <td>{{ row.response }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
 
 </body>
 </html>

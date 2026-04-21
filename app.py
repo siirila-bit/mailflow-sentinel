@@ -245,14 +245,33 @@ def check_mta_sts_policy(domain: str):
         return {"found": False, "url": url, "body": None}
 
 
+def build_probe_stages(data):
+    stage = data.get("stage")
+    code = data.get("smtp_code")
+    response = (data.get("smtp_response") or "").strip()
+    host = (data.get("host") or data.get("eop_host", "")).strip()
+    status = data.get("status", "")
+    error = (data.get("error") or "").strip()
+
+    stages = []
+    if status in ("Timeout", "DNS Error", "Error") or not stage:
+        stages.append({"stage": "Connect", "code": "—", "response": error or "Connection failed"})
+        return {"host": host, "stages": stages}
+
+    stages.append({"stage": "Connect + EHLO + STARTTLS", "code": "220 / 250", "response": "TLS negotiated"})
+    if stage == "mail_from":
+        stages.append({"stage": "MAIL FROM", "code": str(code) if code else "—", "response": response[:150] or "—"})
+    elif stage == "rcpt_to":
+        stages.append({"stage": "MAIL FROM", "code": "250", "response": "OK"})
+        stages.append({"stage": "RCPT TO", "code": str(code) if code else "—", "response": response[:200] or "—"})
+    return {"host": host, "stages": stages}
+
+
 def evaluate_direct_send(domain, vendor, mx_records, dmarc, msft_dkim):
     """
     Hybrid direct send evaluation:
     1. DNS inference as primary signal
-    2. Live SMTP probe as confirmation only
-       - 5.7.68 = upgrade to Confirmed Protected
-       - 250 = don't downgrade — stay with DNS inference
-       - Not Applicable = domain not on M365
+    2. Live SMTP probe as confirmation
     """
     mx_string = " ".join(mx_records).lower()
     is_microsoft = "mail.protection.outlook.com" in mx_string
@@ -261,17 +280,26 @@ def evaluate_direct_send(domain, vendor, mx_records, dmarc, msft_dkim):
 
     # DNS inference baseline
     if is_microsoft and not has_gateway:
-        dns_status = "At Risk"
-        dns_reason = "Microsoft 365 appears to be receiving mail directly with no gateway detected."
+        dns_status = "Not Protected"
+        dns_severity = "high"
     elif has_gateway and is_microsoft:
-        dns_status = "Potential Exposure"
-        dns_reason = "A gateway is visible but Microsoft 365 also appears in the routing path. Connector restrictions should be validated."
+        dns_status = "Not Protected"
+        dns_severity = "medium"
     elif has_gateway:
-        dns_status = "Likely Protected"
-        dns_reason = "A secure email gateway is detected in front of the mail system. Direct send risk is reduced."
+        dns_status = "Protected"
+        dns_severity = "low"
     else:
         dns_status = "Unknown"
-        dns_reason = "Unable to determine direct send exposure from DNS alone."
+        dns_severity = "low"
+
+    def _reason(status, severity):
+        if status == "Protected":
+            return f"A {vendor} secure email gateway is detected in the MX routing path. Mail must pass through the gateway before reaching the destination server, preventing unauthorized direct delivery."
+        if status == "Not Protected" and severity == "high":
+            return "Microsoft 365 MX records are publicly reachable with no gateway detected. No connector restriction has been confirmed from external signals — direct delivery to the EOP endpoint may be possible."
+        if status == "Not Protected" and severity == "medium":
+            return "A gateway is present in DNS but Microsoft 365 also appears in the routing path. Connector restrictions have not been confirmed — direct delivery bypass to the M365 endpoint may still be possible."
+        return "Unable to determine direct send exposure from DNS alone."
 
     # Try live probe for confirmation
     try:
@@ -280,36 +308,63 @@ def evaluate_direct_send(domain, vendor, mx_records, dmarc, msft_dkim):
             data = json.loads(resp.read().decode())
 
         probe_status = data.get("status", "Unknown")
-        smtp_response = data.get("smtp_response", "")
+        smtp_response = (data.get("smtp_response") or "").strip()
+        smtp_code = data.get("smtp_code")
+        probe_detail = build_probe_stages(data)
 
-        # Only upgrade on definitive 5.7.68 connector block
-        if probe_status == "Protected" and ("5.7.68" in (smtp_response or "") or "TenantInboundAttribution" in (smtp_response or "")):
+        # Confirmed connector block via 5.7.68 TenantInboundAttribution
+        if probe_status == "Protected" and ("5.7.68" in smtp_response or "TenantInboundAttribution" in smtp_response):
             return {
-                "status": "Likely Protected",
+                "status": "Protected",
                 "severity": "low",
-                "reason": dns_reason,
-                "validation": f"Live SMTP probe confirmed connector-level block: {smtp_response[:120] if smtp_response else '5.7.68 TenantInboundAttribution'}",
+                "reason": f"Microsoft 365 rejected the connection at RCPT TO with {smtp_code or '550'} 5.7.68 TenantInboundAttribution. Connector enforcement is active — only mail from authorized sources will be accepted by this tenant.",
+                "validation": f"Live probe confirmed: {smtp_response[:150]}",
                 "probe": "confirmed",
+                "probe_detail": probe_detail,
             }
 
-        # 250 from probe is inconclusive — transport rules may still block post-DATA
-        # Stay with DNS inference result
+        # Probe returned 250
+        if probe_status == "Exposed":
+            if not has_gateway:
+                # No gateway in MX — 250 confirms direct delivery to M365 is possible
+                eop_host = (data.get("host") or data.get("eop_host", "the M365 EOP endpoint")).strip()
+                return {
+                    "status": "Not Protected",
+                    "severity": "high",
+                    "reason": f"Microsoft 365 accepted the SMTP envelope at RCPT TO (250 OK) from an external, unauthenticated source at {eop_host}. No connector-level restriction was detected.",
+                    "validation": "Live SMTP probe returned 250 at RCPT TO. Transport rule-based blocking is not detectable externally — additional protection may still be in place post-DATA.",
+                    "probe": "confirmed",
+                    "probe_detail": probe_detail,
+                }
+            else:
+                # Gateway present — probe 250 is inconclusive (probe IP hits M365 directly, bypassing the gateway path)
+                return {
+                    "status": "Protected",
+                    "severity": "low",
+                    "reason": _reason("Protected", "low"),
+                    "validation": "Live SMTP probe returned 250, but this is inconclusive — the probe connects directly to the M365 EOP endpoint from an external IP, bypassing the gateway. Gateway detection is the authoritative signal.",
+                    "probe": "dns_primary",
+                    "probe_detail": probe_detail,
+                }
+
+        # Probe not applicable or inconclusive — use DNS inference with definitive reason
         return {
             "status": dns_status,
-            "severity": "high" if dns_status == "At Risk" else "medium" if dns_status == "Potential Exposure" else "low",
-            "reason": dns_reason,
-            "validation": "Live SMTP probe returned 250 at RCPT TO. Note: transport rule-based blocking is not detectable externally — full protection may still be in place internally.",
+            "severity": dns_severity,
+            "reason": _reason(dns_status, dns_severity),
+            "validation": f"Live SMTP probe status: {probe_status}. DNS inference is the primary signal.",
             "probe": "dns_primary",
+            "probe_detail": probe_detail,
         }
 
     except Exception:
-        # Probe unavailable — fall back to DNS only
         return {
             "status": dns_status,
-            "severity": "high" if dns_status == "At Risk" else "medium" if dns_status == "Potential Exposure" else "low",
-            "reason": dns_reason,
-            "validation": "DNS inference only. A live SMTP probe provides additional confirmation.",
+            "severity": dns_severity,
+            "reason": _reason(dns_status, dns_severity),
+            "validation": "DNS inference only — live SMTP probe was unavailable.",
             "probe": "dns",
+            "probe_detail": None,
         }
 
 
@@ -350,10 +405,11 @@ def generate_recommendations(spf, dmarc, mta_sts_record, tls_rpt_record, direct_
         fixes.append("Add an MTA-STS record and publish a valid policy file.")
     if not tls_rpt_record:
         fixes.append("Publish a TLS-RPT record to receive transport security failure reports.")
-    if direct_send["status"] == "At Risk":
-        fixes.append("Restrict Microsoft 365 so it only accepts mail from approved gateway or connector sources.")
-    if direct_send["status"] == "Potential Exposure":
-        fixes.append("Validate direct send exposure with a live SMTP probe against the Microsoft 365 endpoint.")
+    if direct_send["status"] == "Not Protected":
+        if direct_send.get("severity") == "high":
+            fixes.append("Restrict Microsoft 365 so it only accepts mail from approved gateway or connector sources.")
+        else:
+            fixes.append("Validate Microsoft 365 connector configuration — a gateway is present but direct delivery bypass should be confirmed.")
     if catch_all["status"] == "Catch-All Enabled":
         fixes.append("Disable catch-all to prevent email harvesting and reduce spam exposure.")
     return fixes
@@ -373,7 +429,7 @@ def build_score_summary(score, spf, dmarc, dkim_present, mta_sts_record, direct_
             parts.append("DKIM is active")
         if not mta_sts_record:
             parts.append("transport security (MTA-STS) is missing")
-        if direct_send_status == "Potential Exposure":
+        if direct_send_status == "Not Protected":
             parts.append("direct send requires validation")
         return "Good baseline posture. " + ("; ".join(parts) + "." if parts else "Some gaps remain.")
     elif score >= 50:
@@ -384,7 +440,7 @@ def build_score_summary(score, spf, dmarc, dkim_present, mta_sts_record, direct_
             issues.append("DMARC is not enforced")
         if not dkim_present:
             issues.append("DKIM is not configured")
-        if direct_send_status == "At Risk":
+        if direct_send_status == "Not Protected":
             issues.append("direct send is exposed")
         return "Moderate risk. " + (", ".join(issues) + "." if issues else "Multiple gaps present.")
     else:
@@ -395,7 +451,7 @@ def build_score_summary(score, spf, dmarc, dkim_present, mta_sts_record, direct_
             critical.append("no DMARC")
         if not dkim_present:
             critical.append("no DKIM")
-        if direct_send_status == "At Risk":
+        if direct_send_status == "Not Protected":
             critical.append("direct send exposed")
         return "High risk. This domain is vulnerable to spoofing: " + (", ".join(critical) + "." if critical else "multiple critical controls missing.")
 
@@ -425,12 +481,9 @@ def calculate_score(spf, dmarc, spf_lookups, mta_sts_record, tls_rpt_record, dir
         score -= 15
         findings.append("Microsoft 365 DKIM not detected")
 
-    if direct_send_status == "At Risk":
+    if direct_send_status == "Not Protected":
         score -= 20
-        findings.append("Direct send exposure appears likely")
-    elif direct_send_status == "Potential Exposure":
-        score -= 10
-        findings.append("Direct send exposure requires validation")
+        findings.append("Direct send — Microsoft 365 endpoint may be reachable without connector restrictions")
 
     if not mta_sts_record:
         score -= 6
