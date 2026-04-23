@@ -198,18 +198,49 @@ def infer_dkim_signing_authority(vendor: str, dkim_results, msft_dkim):
     }
 
 
-def count_spf_lookups(spf_record):
+def count_spf_lookups(spf_record: str | None) -> int:
+    """
+    Recursively resolve SPF includes and redirects via DNS and return the
+    exact number of DNS-lookup-consuming mechanisms encountered.
+
+    RFC 7208 §4.6.4 caps evaluation at 10 such lookups; this function returns
+    the real count so the caller can flag anything over 10 as permerror.
+    """
+    def _resolve(record: str, visited: set, depth: int) -> int:
+        if depth > 12:  # hard guard against malformed/adversarial chains
+            return 0
+        total = 0
+        for token in record.split():
+            t = token.lower()
+            if t.startswith("include:"):
+                target = token[8:]
+                total += 1
+                if target not in visited:
+                    visited.add(target)
+                    fetched = get_spf(target)
+                    if fetched:
+                        total += _resolve(fetched, visited, depth + 1)
+            elif t.startswith("redirect="):
+                target = token[9:]
+                total += 1
+                if target not in visited:
+                    visited.add(target)
+                    fetched = get_spf(target)
+                    if fetched:
+                        total += _resolve(fetched, visited, depth + 1)
+                break  # redirect= replaces the rest of the record
+            elif t in ("a", "mx", "ptr") or any(
+                t.startswith(x) for x in ("a:", "mx:", "ptr:", "exists:")
+            ):
+                total += 1
+            if total > 10:  # stop early once the RFC limit is already exceeded
+                break
+        return total
+
     if not spf_record:
         return 0
-    parts = spf_record.split()
-    count = 0
-    for part in parts:
-        lowered = part.lower()
-        if any(lowered.startswith(x) for x in ["include:", "exists:", "redirect="]):
-            count += 1
-        elif lowered in ["a", "mx", "ptr"] or any(lowered.startswith(x) for x in ["a:", "mx:", "ptr:"]):
-            count += 1
-    return count
+
+    return _resolve(spf_record, set(), 0)
 
 
 # ── Third-party sender detection ─────────────────────────────────────────────
