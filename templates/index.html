@@ -890,7 +890,7 @@
                         {% if spf %}{{ spf_lookups }}/10{% else %}Missing{% endif %}
                     </div>
                     <div class="mini-note">
-                        {% if spf %}SPF record present with estimated lookup count{% else %}No SPF record found{% endif %}
+                        {% if spf %}SPF record present{% else %}No SPF record found{% endif %}
                     </div>
                 </div>
 
@@ -964,7 +964,7 @@
                     <p class="section-sub">SPF defines which mail servers are allowed to send on behalf of the domain.</p>
                     {% if spf %}
                     <div class="record-box"><code>{{ spf }}</code></div>
-                    <p class="muted" style="margin-top: 12px;">Estimated SPF lookups: <strong>{{ spf_lookups }}</strong></p>
+                    <p class="muted" style="margin-top: 12px;">SPF lookups: <strong>{{ spf_lookups }}</strong></p>
                     {% else %}
                     <p class="muted">No SPF record found.</p>
                     {% endif %}
