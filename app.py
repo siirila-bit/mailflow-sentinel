@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.templating import Jinja2Templates
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -10,9 +10,13 @@ import urllib.parse
 import ssl
 import json
 import re
+import uuid
+import os
 from datetime import datetime, timezone
 
 PROBE_URL = "http://144.202.103.114:8001/probe"
+REPORTS_DIR = "/opt/mailflow/reports"
+os.makedirs(REPORTS_DIR, exist_ok=True)
 
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
@@ -649,6 +653,31 @@ def about(request: Request):
     return templates.TemplateResponse(request=request, name="about.html", context={})
 
 
+@app.post("/share")
+@limiter.limit("10/minute")
+async def share(request: Request):
+    data = await request.json()
+    report_id = str(uuid.uuid4())
+    path = os.path.join(REPORTS_DIR, f"{report_id}.json")
+    with open(path, "w") as f:
+        json.dump(data, f)
+    return {"url": f"/r/{report_id}"}
+
+
+@app.get("/r/{report_id}")
+def shared_report(request: Request, report_id: str):
+    try:
+        uuid.UUID(report_id)
+    except ValueError:
+        raise HTTPException(status_code=404)
+    path = os.path.join(REPORTS_DIR, f"{report_id}.json")
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404)
+    with open(path) as f:
+        data = json.load(f)
+    return templates.TemplateResponse(request=request, name="share.html", context=data)
+
+
 @app.get("/analyze")
 @limiter.limit("10/minute")
 def analyze(request: Request, domain: str):
@@ -738,6 +767,22 @@ def analyze(request: Request, domain: str):
 
     report_date = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
+    share_data = {
+        "domain": domain, "input_value": original_input, "mx": mx, "vendor": vendor,
+        "spf": spf, "dmarc": dmarc, "bimi_record": bimi_record,
+        "dkim_results": dkim_results, "dkim_present": dkim_present,
+        "msft_dkim": msft_dkim, "dkim_signing_authority": dkim_signing_authority,
+        "spf_lookups": spf_lookups, "mta_sts_record": mta_sts_record,
+        "tls_rpt_record": tls_rpt_record, "mta_sts_policy": mta_sts_policy,
+        "direct_send": direct_send, "catch_all": catch_all,
+        "email_senders": email_senders, "recommended_fixes": recommended_fixes,
+        "score": score, "risk_level": risk_level, "score_label": score_label,
+        "findings": findings, "score_summary": score_summary,
+        "report_date": report_date, "open_relay": open_relay,
+        "fingerprint": fingerprint, "subdomain_data": subdomain_data,
+    }
+    scan_data_json = json.dumps(share_data).replace("</", r"</")
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -770,5 +815,6 @@ def analyze(request: Request, domain: str):
             "open_relay": open_relay,
             "fingerprint": fingerprint,
             "subdomain_data": subdomain_data,
+            "scan_data_json": scan_data_json,
         }
     )

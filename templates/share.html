@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>MailFlow Sentinel</title>
+    <title>Report: {{ domain }} — MailFlow Sentinel</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230b1020'/><path d='M4 10l12 9 12-9' stroke='%235aa9ff' stroke-width='2' fill='none' stroke-linecap='round'/><rect x='4' y='10' width='24' height='16' rx='2' stroke='%235aa9ff' stroke-width='2' fill='none'/></svg>">
     <style>
@@ -763,55 +763,46 @@
         .smtp-trace-table td:nth-child(2) { font-family: monospace; color: var(--muted); white-space: nowrap; }
         .smtp-trace-table td:nth-child(3) { font-family: monospace; font-size: 12px; word-break: break-word; color: var(--muted); }
         .smtp-trace-table tr:last-child td { border-bottom: none; }
+    </style>
 
-        .share-modal-overlay {
-            display: none; position: fixed; inset: 0;
-            background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px); z-index: 1000;
-            align-items: center; justify-content: center; padding: 20px;
+
+        .shared-banner {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 11px 16px;
+            border-radius: 12px;
+            background: rgba(90, 169, 255, 0.07);
+            border: 1px solid rgba(90, 169, 255, 0.18);
+            font-size: 13px;
+            color: var(--muted);
+            margin-bottom: 20px;
+            flex-wrap: wrap;
         }
-        .share-modal-overlay.open { display: flex; }
-        .share-modal-box {
-            background: #111827; border: 1px solid var(--border);
-            border-radius: 16px; padding: 24px; width: 100%; max-width: 520px;
-            box-shadow: 0 24px 60px rgba(0,0,0,0.5);
-        }
-        .share-url-row {
-            display: flex; gap: 8px; margin-top: 14px;
-        }
-        .share-url-input {
-            flex: 1; padding: 10px 12px; border-radius: 10px;
-            border: 1px solid var(--border); background: rgba(255,255,255,0.04);
-            color: var(--text); font-size: 13px; font-family: monospace; outline: none;
-        }
+        .shared-banner strong { color: var(--text); font-weight: 600; }
+        .shared-banner a { color: var(--accent); text-decoration: none; margin-left: auto; white-space: nowrap; }
+        .shared-banner a:hover { text-decoration: underline; }
+
     </style>
 </head>
 <body>
-    <div class="wrap">
-        <div class="header-row">
-            <div>
-                <h1 class="title">MailFlow <span>Sentinel</span></h1>
-            </div>
-            <a href="/about" style="font-size:13px;font-weight:600;color:var(--muted);text-decoration:none;padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.03);transition:color 0.15s,border-color 0.15s;" onmouseover="this.style.color='var(--accent)';this.style.borderColor='rgba(90,169,255,0.3)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">About</a>
-        </div>
-        <p class="subtitle">Run a fast DNS-based email security assessment for any domain or email address.</p>
+<div class="wrap">
 
-        <div class="search-card">
-            <form action="/analyze" method="get">
-                <div class="search-row">
-                    <input
-                        type="text"
-                        name="domain"
-                        placeholder="Enter domain or email (e.g. company.com)"
-                        value="{{ input_value or '' }}"
-                        autofocus
-                    >
-                    <button type="submit">Run Analysis</button>
-                </div>
-            </form>
+    <div class="header-row" style="margin-bottom: 16px;">
+        <div>
+            <a href="/" style="text-decoration:none;">
+                <h1 class="title" style="font-size:32px;">MailFlow <span>Sentinel</span></h1>
+            </a>
         </div>
+        <a href="/about" style="font-size:13px;font-weight:600;color:var(--muted);text-decoration:none;padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.03);transition:color 0.15s,border-color 0.15s;" onmouseover="this.style.color='var(--accent)';this.style.borderColor='rgba(90,169,255,0.3)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">About</a>
+    </div>
 
-        {% if domain %}
+    <div class="shared-banner">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--accent)"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+        <span><strong>Shared report</strong> &middot; Scanned on {{ report_date }}</span>
+        <a href="/?domain={{ domain }}">Run fresh scan &rarr;</a>
+    </div>
+
         <div class="result-card">
             <div class="topbar">
                 <div>
@@ -955,10 +946,6 @@
                 <button class="btn-action" onclick="window.print()">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                     Download PDF
-                </button>
-                <button class="btn-action" onclick="copyShareLink(this)">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-                    Share Results
                 </button>
                 <button class="btn-action" onclick="copyReport(this)">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
@@ -1342,34 +1329,14 @@
             </div>
         </div>
 
-        <!-- Scan another domain -->
         <div class="scan-another">
             <div>
-                <strong>Analyze another domain</strong>
-                <p>Check any domain or email address for email security posture.</p>
+                <strong>Run a fresh scan</strong>
+                <p>Re-run this domain live or check a different one.</p>
             </div>
-            <a href="/" class="btn-scan">← New Analysis</a>
+            <a href="/?domain={{ domain }}" class="btn-scan">Analyze {{ domain }} →</a>
         </div>
 
-
-        <script id="scan-data" type="application/json">{{ scan_data_json | safe }}</script>
-
-        <div id="share-modal" class="share-modal-overlay" onclick="closeShareModal(event)">
-            <div class="share-modal-box">
-                <div class="smtp-modal-header">
-                    <span>Shareable link</span>
-                    <button class="smtp-modal-close" onclick="closeShareModal()">&times;</button>
-                </div>
-                <p style="color:var(--muted);font-size:13px;margin:8px 0 0;">Anyone with this link can view the report.</p>
-                <div class="share-url-row">
-                    <input id="share-url-input" class="share-url-input" type="text" readonly>
-                    <button class="btn-action" id="share-copy-btn" onclick="copyShareUrl(this)">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                        Copy
-                    </button>
-                </div>
-            </div>
-        </div>
         <!-- Hidden report data for copy -->
         <div id="report-data" style="display:none;">
 MailFlow Sentinel Report — {{ domain }}
@@ -1399,77 +1366,10 @@ Direct Send: {{ direct_send.status }}
 Analyzed by mailflowsentinel.com
         </div>
 
-        {% endif %}
-    </div>
-
-    <script>
-        async function copyShareLink(btn) {
-            const raw = document.getElementById('scan-data');
-            if (!raw) return;
-            const orig = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg> Saving…';
-            try {
-                const resp = await fetch('/share', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: raw.textContent
-                });
-                const data = await resp.json();
-                const url = window.location.origin + data.url;
-                document.getElementById('share-url-input').value = url;
-                document.getElementById('share-modal').classList.add('open');
-            } catch(e) {
-                alert('Could not create share link. Please try again.');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = orig;
-            }
-        }
-
-        function copyShareUrl(btn) {
-            const input = document.getElementById('share-url-input');
-            navigator.clipboard.writeText(input.value).then(() => {
-                btn.classList.add('copied');
-                btn.textContent = 'Copied!';
-                setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy'; }, 2000);
-            });
-        }
-
-        function closeShareModal(e) {
-            if (!e || e.target === document.getElementById('share-modal'))
-                document.getElementById('share-modal').classList.remove('open');
-        }
-
-        function copyReport(btn) {
-            const text = document.getElementById('report-data').innerText;
-            navigator.clipboard.writeText(text).then(() => {
-                btn.classList.add('copied');
-                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
-                setTimeout(() => {
-                    btn.classList.remove('copied');
-                    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy Report';
-                }, 2000);
-            });
-        }
-
-        function openSmtpModal() {
-            document.getElementById('smtp-modal').classList.add('open');
-        }
-        function closeSmtpModal(e) {
-            if (!e || e.target === document.getElementById('smtp-modal')) {
-                document.getElementById('smtp-modal').classList.remove('open');
-            }
-        }
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') { closeSmtpModal(); closeShareModal(); }
-        });
-    </script>
 
     <div style="text-align: center; padding: 20px 0 40px; color: rgba(149,163,191,0.4); font-size: 13px; font-family: Inter, sans-serif;">
         Built by Ray Siirila &nbsp;&middot;&nbsp; <a href="https://mailflowsentinel.com" style="color: rgba(90,169,255,0.4); text-decoration: none;">mailflowsentinel.com</a> &nbsp;&middot;&nbsp; <a href="/about" style="color: rgba(90,169,255,0.4); text-decoration: none;">About</a>
     </div>
-
 
     {% if direct_send is defined %}
     <div id="smtp-modal" class="smtp-modal-overlay" onclick="closeSmtpModal(event)">
@@ -1497,5 +1397,29 @@ Analyzed by mailflowsentinel.com
     </div>
     {% endif %}
 
+</div>
+<script>
+    function copyReport(btn) {
+        const text = document.getElementById('report-data').innerText;
+        navigator.clipboard.writeText(text).then(() => {
+            btn.classList.add('copied');
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+            setTimeout(() => {
+                btn.classList.remove('copied');
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy Report';
+            }, 2000);
+        });
+    }
+    function openSmtpModal() {
+        document.getElementById('smtp-modal').classList.add('open');
+    }
+    function closeSmtpModal(e) {
+        if (!e || e.target === document.getElementById('smtp-modal'))
+            document.getElementById('smtp-modal').classList.remove('open');
+    }
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeSmtpModal();
+    });
+</script>
 </body>
 </html>
