@@ -8,6 +8,7 @@ import dns.resolver
 import urllib.request
 import urllib.parse
 import ssl
+import asyncio
 import json
 import re
 import uuid
@@ -155,6 +156,39 @@ def check_common_dkim(domain: str):
             "weak": bool(record) and bits == 1024,
         })
     return results
+
+
+async def check_common_dkim_async(domain: str) -> list:
+    selectors = [
+        "selector1", "selector2", "default", "dkim", "s1", "s2",
+        "mail", "email", "smtp", "mta", "google", "k1", "k2", "key1", "key2",
+    ]
+
+    async def _lookup(selector: str) -> dict:
+        record = await asyncio.to_thread(get_dkim_record, selector, domain)
+        host = f"{selector}._domainkey.{domain}"
+        if selector == "selector1":
+            label = "Microsoft 365 (Primary)"
+        elif selector == "selector2":
+            label = "Microsoft 365 (Secondary)"
+        elif selector == "google":
+            label = "Google"
+        elif selector in ["s1", "s2"]:
+            label = "SendGrid"
+        else:
+            label = "Common Selector"
+        bits = estimate_dkim_bits(record)
+        return {
+            "selector": selector,
+            "host": host,
+            "label": label,
+            "found": bool(record),
+            "record": record,
+            "bits": bits,
+            "weak": bool(record) and bits == 1024,
+        }
+
+    return list(await asyncio.gather(*[_lookup(s) for s in selectors]))
 
 
 def detect_msft_dkim(dkim_results):
@@ -638,6 +672,35 @@ def calculate_score(spf, dmarc, spf_lookups, mta_sts_record, tls_rpt_record, dir
     return score, risk_level, score_label, findings
 
 
+def _probe_relay(domain: str) -> dict:
+    result = {"status": "Unknown", "reason": "", "mx_tested": [], "tls_versions": [], "banners": []}
+    try:
+        relay_url = f"http://144.202.103.114:8001/relay?domain={urllib.parse.quote(domain)}"
+        with urllib.request.urlopen(relay_url, timeout=20) as resp:
+            relay_data = json.loads(resp.read().decode())
+        result["status"] = relay_data.get("status", "Unknown")
+        result["reason"] = relay_data.get("reason", "")
+        result["mx_tested"] = relay_data.get("mx_tested", [])
+        for r in relay_data.get("results", []):
+            if r.get("tls_version"):
+                result["tls_versions"].append(r["tls_version"])
+            if r.get("banner"):
+                result["banners"].append(r["banner"])
+    except Exception:
+        result["status"] = "Unavailable"
+        result["reason"] = "Open relay check unavailable."
+    return result
+
+
+def _probe_subdomains(domain: str) -> dict:
+    try:
+        sub_url = f"http://144.202.103.114:8001/subdomains?domain={urllib.parse.quote(domain)}"
+        with urllib.request.urlopen(sub_url, timeout=30) as resp:
+            return json.loads(resp.read().decode())
+    except Exception:
+        return {"subdomains_found": 0, "open_relays_found": 0, "open_relay_hosts": [], "results": []}
+
+
 @app.get("/robots.txt")
 def robots():
     return FileResponse("/opt/mailflow/robots.txt")
@@ -680,47 +743,44 @@ def shared_report(request: Request, report_id: str):
 
 @app.get("/analyze")
 @limiter.limit("10/minute")
-def analyze(request: Request, domain: str):
+async def analyze(request: Request, domain: str):
     original_input = domain
     domain = extract_domain(domain)
 
-    mx = get_mx(domain)
-    vendor = detect_vendor(mx)
-    spf = get_spf(domain)
-    dmarc = get_dmarc(domain)
-    bimi_record = get_bimi(domain)
+    # Phase 1: all independent DNS lookups in parallel (6 TXT/MX + 15 DKIM selectors)
+    mx, spf, dmarc, bimi_record, mta_sts_record, tls_rpt_record, dkim_results = await asyncio.gather(
+        asyncio.to_thread(get_mx, domain),
+        asyncio.to_thread(get_spf, domain),
+        asyncio.to_thread(get_dmarc, domain),
+        asyncio.to_thread(get_bimi, domain),
+        asyncio.to_thread(get_mta_sts_dns, domain),
+        asyncio.to_thread(get_tls_rpt, domain),
+        check_common_dkim_async(domain),
+    )
 
-    dkim_results = check_common_dkim(domain)
+    vendor = detect_vendor(mx)
     dkim_present = any(item["found"] for item in dkim_results)
     msft_dkim = detect_msft_dkim(dkim_results)
     dkim_signing_authority = infer_dkim_signing_authority(vendor, dkim_results, msft_dkim)
 
-    spf_lookups = count_spf_lookups(spf)
-    mta_sts_record = get_mta_sts_dns(domain)
-    tls_rpt_record = get_tls_rpt(domain)
-    mta_sts_policy = check_mta_sts_policy(domain)
-
-    direct_send = evaluate_direct_send(domain, vendor, mx, dmarc, msft_dkim)
-    catch_all = evaluate_catch_all(domain)
-    email_senders = detect_email_senders(domain, spf)
-
-    # Open relay check via probe
-    open_relay = {"status": "Unknown", "reason": "", "mx_tested": [], "tls_versions": [], "banners": []}
-    try:
-        relay_url = f"http://144.202.103.114:8001/relay?domain={urllib.parse.quote(domain)}"
-        with urllib.request.urlopen(relay_url, timeout=20) as resp:
-            relay_data = json.loads(resp.read().decode())
-        open_relay["status"] = relay_data.get("status", "Unknown")
-        open_relay["reason"] = relay_data.get("reason", "")
-        open_relay["mx_tested"] = relay_data.get("mx_tested", [])
-        for r in relay_data.get("results", []):
-            if r.get("tls_version"):
-                open_relay["tls_versions"].append(r["tls_version"])
-            if r.get("banner"):
-                open_relay["banners"].append(r["banner"])
-    except Exception:
-        open_relay["status"] = "Unavailable"
-        open_relay["reason"] = "Open relay check unavailable."
+    # Phase 2: all slow I/O in parallel (SPF recursion, MTA-STS fetch, 5 probe calls)
+    (
+        spf_lookups,
+        mta_sts_policy,
+        direct_send,
+        catch_all,
+        email_senders,
+        open_relay,
+        subdomain_data,
+    ) = await asyncio.gather(
+        asyncio.to_thread(count_spf_lookups, spf),
+        asyncio.to_thread(check_mta_sts_policy, domain),
+        asyncio.to_thread(evaluate_direct_send, domain, vendor, mx, dmarc, msft_dkim),
+        asyncio.to_thread(evaluate_catch_all, domain),
+        asyncio.to_thread(detect_email_senders, domain, spf),
+        asyncio.to_thread(_probe_relay, domain),
+        asyncio.to_thread(_probe_subdomains, domain),
+    )
 
     recommended_fixes = generate_recommendations(
         spf, dmarc, mta_sts_record, tls_rpt_record,
@@ -730,16 +790,8 @@ def analyze(request: Request, domain: str):
     if open_relay["status"] == "Open Relay":
         recommended_fixes.insert(0, "CRITICAL: Open relay detected — your mail server will forward email for anyone. Restrict relay immediately.")
 
-    # Subdomain check
-    subdomain_data = {"subdomains_found": 0, "open_relays_found": 0, "open_relay_hosts": [], "results": []}
-    try:
-        sub_url = f"http://144.202.103.114:8001/subdomains?domain={urllib.parse.quote(domain)}"
-        with urllib.request.urlopen(sub_url, timeout=30) as resp:
-            subdomain_data = json.loads(resp.read().decode())
-        if subdomain_data.get("open_relays_found", 0) > 0:
-            recommended_fixes.insert(0, f"CRITICAL: Open relay detected on mail subdomain(s): {', '.join(subdomain_data['open_relay_hosts'])}. Restrict relay immediately.")
-    except Exception:
-        pass
+    if subdomain_data.get("open_relays_found", 0) > 0:
+        recommended_fixes.insert(0, f"CRITICAL: Open relay detected on mail subdomain(s): {', '.join(subdomain_data['open_relay_hosts'])}. Restrict relay immediately.")
 
     # Build mail server fingerprint from open relay probe data
     fingerprint = {
