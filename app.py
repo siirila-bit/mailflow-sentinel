@@ -140,13 +140,15 @@ def check_common_dkim(domain: str):
             label = "SendGrid"
         else:
             label = "Common Selector"
+        bits = estimate_dkim_bits(record)
         results.append({
             "selector": selector,
             "host": host,
             "label": label,
             "found": bool(record),
             "record": record,
-            "bits": estimate_dkim_bits(record),
+            "bits": bits,
+            "weak": bool(record) and bits == 1024,
         })
     return results
 
@@ -473,7 +475,7 @@ def evaluate_catch_all(domain: str) -> dict:
         }
 
 
-def generate_recommendations(spf, dmarc, mta_sts_record, tls_rpt_record, direct_send, catch_all, msft_dkim, vendor=""):
+def generate_recommendations(spf, dmarc, mta_sts_record, tls_rpt_record, direct_send, catch_all, msft_dkim, vendor="", dkim_results=None):
     fixes = []
     if not spf:
         fixes.append("Add an SPF record to define authorized sending sources.")
@@ -495,6 +497,8 @@ def generate_recommendations(spf, dmarc, mta_sts_record, tls_rpt_record, direct_
             fixes.append("Validate Microsoft 365 connector configuration — a gateway is present but direct delivery bypass should be confirmed.")
     if catch_all["status"] == "Catch-All Enabled":
         fixes.append("Disable catch-all to prevent email harvesting and reduce spam exposure.")
+    if dkim_results and any(item.get("weak") for item in dkim_results):
+        fixes.append("Rotate DKIM keys from 1024-bit to 2048-bit for stronger cryptographic protection.")
     return fixes
 
 
@@ -539,7 +543,7 @@ def build_score_summary(score, spf, dmarc, dkim_present, mta_sts_record, direct_
         return "High risk. This domain is vulnerable to spoofing: " + (", ".join(critical) + "." if critical else "multiple critical controls missing.")
 
 
-def calculate_score(spf, dmarc, spf_lookups, mta_sts_record, tls_rpt_record, direct_send_status, msft_dkim, catch_all_status):
+def calculate_score(spf, dmarc, spf_lookups, mta_sts_record, tls_rpt_record, direct_send_status, msft_dkim, catch_all_status, dkim_results=None):
     score = 100
     findings = []
 
@@ -563,6 +567,10 @@ def calculate_score(spf, dmarc, spf_lookups, mta_sts_record, tls_rpt_record, dir
     if not msft_dkim["enabled"]:
         score -= 15
         findings.append("Microsoft 365 DKIM not detected")
+
+    if dkim_results and any(item.get("weak") for item in dkim_results):
+        score -= 8
+        findings.append("Weak DKIM key — one or more active keys are 1024-bit")
 
     if direct_send_status == "Not Protected":
         score -= 20
@@ -651,7 +659,7 @@ def analyze(request: Request, domain: str):
 
     recommended_fixes = generate_recommendations(
         spf, dmarc, mta_sts_record, tls_rpt_record,
-        direct_send, catch_all, msft_dkim, vendor,
+        direct_send, catch_all, msft_dkim, vendor, dkim_results,
     )
 
     if open_relay["status"] == "Open Relay":
@@ -685,7 +693,7 @@ def analyze(request: Request, domain: str):
 
     score, risk_level, score_label, findings = calculate_score(
         spf, dmarc, spf_lookups, mta_sts_record,
-        tls_rpt_record, direct_send["status"], msft_dkim, catch_all["status"],
+        tls_rpt_record, direct_send["status"], msft_dkim, catch_all["status"], dkim_results,
     )
 
     score_summary = build_score_summary(

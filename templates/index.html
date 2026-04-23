@@ -1035,7 +1035,7 @@
                             {% for d in dkim_results %}
                                 {% if d.found %}
                                 <div style="margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
-                                    <div>✔ <strong>{{ d.selector }}</strong> ({{ d.label }}) {% if d.bits %}– {{ d.bits }} bit{% endif %}</div>
+                                    <div>✔ <strong>{{ d.selector }}</strong> ({{ d.label }}) {% if d.bits %}– {{ d.bits }} bit{% if d.weak %} <span style="color:#f87171;font-weight:600;">⚠ weak</span>{% endif %}{% endif %}</div>
                                     <div class="muted" style="margin-top: 6px;">DKIM DNS host: <code>{{ d.host }}</code></div>
                                 </div>
                                 {% endif %}
