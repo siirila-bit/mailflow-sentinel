@@ -9,6 +9,7 @@ import urllib.request
 import urllib.parse
 import ssl
 import json
+import re
 from datetime import datetime, timezone
 
 PROBE_URL = "http://144.202.103.114:8001/probe"
@@ -52,6 +53,14 @@ def get_txt_records(name: str):
         return records
     except Exception:
         return []
+
+
+def get_cname(hostname: str) -> str | None:
+    try:
+        answers = dns.resolver.resolve(hostname, "CNAME")
+        return str(answers[0].target).rstrip(".")
+    except Exception:
+        return None
 
 
 def get_spf(domain: str):
@@ -200,6 +209,80 @@ def count_spf_lookups(spf_record):
             count += 1
     return count
 
+
+# ── Third-party sender detection ─────────────────────────────────────────────
+
+_ESP_PATTERNS: dict[str, list[str]] = {
+    "HubSpot":          [r"hubspot\.com", r"hs-sites\.com", r"hsmai", r"hubspotemail\.net"],
+    "SendGrid":         [r"sendgrid\.net", r"sendgrid\.com"],
+    "Mailchimp":        [r"mailchimp\.com", r"mcsv\.net", r"list-manage\.com"],
+    "Klaviyo":          [r"klaviyo\.com", r"klaviyomail\.com"],
+    "Salesforce MC":    [r"exacttarget\.com", r"sfmc"],
+    "Marketo":          [r"marketo\.com", r"mktomail\.com"],
+    "Postmark":         [r"postmarkapp\.com"],
+    "Amazon SES":       [r"amazonses\.com"],
+    "Mailgun":          [r"mailgun\.org", r"mailgun\.net"],
+    "Braze":            [r"braze\.com", r"appboy"],
+    "Iterable":         [r"iterable\.com"],
+    "ActiveCampaign":   [r"activecampaign\.com"],
+    "Constant Contact": [r"constantcontact\.com", r"ctct\.net"],
+}
+
+_DKIM_SELECTORS = [
+    "s1", "s2", "hs1", "hs2",
+    "selector1", "selector2",
+    "google", "k1", "k2",
+    "mail", "default", "dkim", "smtp", "mta",
+]
+
+
+def _match_esps(text: str) -> list[str]:
+    return [name for name, patterns in _ESP_PATTERNS.items()
+            if any(re.search(p, text, re.IGNORECASE) for p in patterns)]
+
+
+def _expand_spf_includes(spf_record: str | None, depth: int = 0) -> list[str]:
+    """Return all include: domains, following one level of redirect=."""
+    if not spf_record or depth > 3:
+        return []
+    includes = []
+    for token in spf_record.split():
+        t = token.lower()
+        if t.startswith("include:"):
+            includes.append(token[8:])
+        elif t.startswith("redirect=") and depth == 0:
+            redirected = get_spf(token[9:])
+            if redirected:
+                includes += _expand_spf_includes(redirected, depth + 1)
+    return includes
+
+
+def detect_email_senders(domain: str, spf: str | None) -> list[dict]:
+    seen: dict[str, dict] = {}
+
+    def _add(esp_name: str, signal: str):
+        if esp_name not in seen:
+            seen[esp_name] = {"name": esp_name, "signals": []}
+        if signal not in seen[esp_name]["signals"]:
+            seen[esp_name]["signals"].append(signal)
+
+    # SPF includes (with redirect= following)
+    for inc in _expand_spf_includes(spf):
+        for esp in _match_esps(inc):
+            _add(esp, f"SPF include:{inc}")
+
+    # DKIM selector CNAMEs
+    for sel in _DKIM_SELECTORS:
+        name = f"{sel}._domainkey.{domain}"
+        cname = get_cname(name)
+        if cname:
+            for esp in _match_esps(cname):
+                _add(esp, f"{name} → {cname}")
+
+    return list(seen.values())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 def detect_vendor(mx_records):
     joined = " ".join(mx_records).lower()
@@ -546,6 +629,7 @@ def analyze(request: Request, domain: str):
 
     direct_send = evaluate_direct_send(domain, vendor, mx, dmarc, msft_dkim)
     catch_all = evaluate_catch_all(domain)
+    email_senders = detect_email_senders(domain, spf)
 
     # Open relay check via probe
     open_relay = {"status": "Unknown", "reason": "", "mx_tested": [], "tls_versions": [], "banners": []}
@@ -591,12 +675,9 @@ def analyze(request: Request, domain: str):
         "mx_hosts": open_relay.get("mx_tested", []),
         "vendor": vendor,
     }
-    # Parse banner for software info
     fingerprint["server_software"] = ""
     if fingerprint["banners"]:
         banner = fingerprint["banners"][0]
-        # Extract software name from banner (after ESMTP or SMTP)
-        import re
         match = re.search(r'(?:ESMTP|SMTP)\s+([^\s(]+)', banner, re.IGNORECASE)
         if match:
             fingerprint["server_software"] = match.group(1)
@@ -634,6 +715,7 @@ def analyze(request: Request, domain: str):
             "mta_sts_policy": mta_sts_policy,
             "direct_send": direct_send,
             "catch_all": catch_all,
+            "email_senders": email_senders,
             "recommended_fixes": recommended_fixes,
             "score": score,
             "risk_level": risk_level,
