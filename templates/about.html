@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>About — MailFlow Sentinel</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230b1020'/><path d='M4 10l12 9 12-9' stroke='%235aa9ff' stroke-width='2' fill='none' stroke-linecap='round'/><rect x='4' y='10' width='24' height='16' rx='2' stroke='%235aa9ff' stroke-width='2' fill='none'/></svg>">
+    <style>
+        :root {
+            --bg: #0b1020;
+            --panel: rgba(18, 25, 45, 0.78);
+            --text: #e8edf7;
+            --muted: #95a3bf;
+            --border: rgba(255, 255, 255, 0.08);
+            --accent: #5aa9ff;
+            --accent-2: #7c5cff;
+            --good: #27c281;
+            --warn: #f0b34a;
+            --bad: #ff6b6b;
+            --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(90, 169, 255, 0.14), transparent 28%),
+                radial-gradient(circle at top right, rgba(124, 92, 255, 0.14), transparent 30%),
+                linear-gradient(180deg, #09101c 0%, #0b1020 100%);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .wrap {
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 48px 24px 80px;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--muted);
+            text-decoration: none;
+            margin-bottom: 36px;
+            transition: color 0.15s;
+        }
+        .back-link:hover { color: var(--accent); }
+
+        .page-title {
+            margin: 0 0 6px;
+            font-size: 42px;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1.05;
+        }
+        .page-title span {
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .tagline {
+            margin: 0 0 40px;
+            font-size: 17px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .card {
+            background: var(--panel);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            border-radius: 20px;
+            padding: 28px 32px;
+            margin-bottom: 20px;
+        }
+
+        .card h2 {
+            margin: 0 0 14px;
+            font-size: 16px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--accent);
+        }
+
+        .card p {
+            margin: 0 0 14px;
+            font-size: 15px;
+            line-height: 1.65;
+            color: var(--muted);
+        }
+        .card p:last-child { margin-bottom: 0; }
+
+        .card p strong {
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .checks-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .checks-list li {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            font-size: 15px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .checks-list li .icon {
+            flex-shrink: 0;
+            width: 22px;
+            height: 22px;
+            border-radius: 6px;
+            background: rgba(90, 169, 255, 0.12);
+            border: 1px solid rgba(90, 169, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 1px;
+        }
+
+        .checks-list li .icon svg {
+            width: 12px;
+            height: 12px;
+            stroke: var(--accent);
+        }
+
+        .checks-list li strong {
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .cta-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 6px;
+            padding: 13px 22px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            color: white;
+            font-weight: 700;
+            font-size: 15px;
+            text-decoration: none;
+            box-shadow: 0 10px 25px rgba(92, 122, 255, 0.28);
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        .cta-link:hover { opacity: 0.9; transform: translateY(-1px); }
+        .cta-link:active { transform: translateY(0); }
+
+        .footer {
+            text-align: center;
+            padding: 20px 0 0;
+            color: rgba(149,163,191,0.4);
+            font-size: 13px;
+        }
+        .footer a {
+            color: rgba(90,169,255,0.4);
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+
+    <a href="/" class="back-link">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Back to tool
+    </a>
+
+    <h1 class="page-title"><span>MailFlow</span> Sentinel</h1>
+    <p class="tagline">Real-time email security analysis for practitioners — not dashboards.</p>
+
+    <div class="card">
+        <h2>What this is</h2>
+        <p>
+            MailFlow Sentinel is a live email security analysis tool built for use in real customer
+            conversations. It was created by an email security practitioner who needed something fast,
+            accurate, and explainable — a tool that shows exactly what an attacker sees when they look
+            at a domain, without requiring a login, a trial, or a sales call.
+        </p>
+        <p>
+            Every result is generated fresh on demand from live DNS and SMTP data.
+            <strong>Nothing is simulated, cached, or estimated.</strong>
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>Methodology</h2>
+        <p>
+            When you run a scan, the tool makes real outbound DNS queries and, where applicable,
+            live SMTP connections to the domain's mail infrastructure. Results reflect the actual
+            public posture of the domain at the time of the scan.
+        </p>
+        <p>
+            SPF lookup counts are resolved recursively — every <code style="color:var(--accent);font-size:13px;">include:</code>
+            and <code style="color:var(--accent);font-size:13px;">redirect=</code> directive is followed
+            via DNS to produce an exact count against the RFC 7208 ten-lookup limit.
+            Third-party senders are identified by resolving DKIM selector CNAMEs and walking the full
+            SPF include chain, not by pattern-matching the raw record string.
+        </p>
+        <p>
+            SMTP probes connect directly to mail infrastructure on port 25 and negotiate a full
+            EHLO/STARTTLS/MAIL FROM/RCPT TO sequence to test for real exposure — not theoretical risk.
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>Checks performed</h2>
+        <ul class="checks-list">
+            <li>
+                <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span><strong>SPF</strong> — record presence, exact recursive DNS lookup count, RFC 7208 limit enforcement</span>
+            </li>
+            <li>
+                <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span><strong>DMARC</strong> — record presence, policy enforcement level (none / quarantine / reject)</span>
+            </li>
+            <li>
+                <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span><strong>DKIM</strong> — common selector enumeration, key size estimation, weak 1024-bit key detection, CNAME delegation mapping</span>
+            </li>
+            <li>
+                <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span><strong>MTA-STS</strong> — DNS record and policy file validation</span>
+            </li>
+            <li>
+                <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span><strong>TLS-RPT</strong> — transport security failure reporting record</span>
+            </li>
+            <li>
+                <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span><strong>Microsoft 365 direct send</strong> — live SMTP probe to the EOP endpoint to test connector enforcement</span>
+            </li>
+            <li>
+                <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span><strong>Open relay</strong> — live SMTP test for external-to-external relay acceptance on MX servers</span>
+            </li>
+            <li>
+                <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span><strong>Catch-all detection</strong> — SMTP probe to a nonexistent address to test wildcard acceptance</span>
+            </li>
+            <li>
+                <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span><strong>Mail subdomain scan</strong> — SMTP probe across common subdomains (mail., smtp., relay., etc.) for forgotten infrastructure</span>
+            </li>
+            <li>
+                <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span><strong>Third-party sender detection</strong> — SPF include chain and DKIM CNAME resolution to identify ESPs in use</span>
+            </li>
+            <li>
+                <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span><strong>BIMI</strong> — brand indicator record and DMARC prerequisite check</span>
+            </li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>Run a scan</h2>
+        <p>Enter any domain or email address to get a full report.</p>
+        <a href="/" class="cta-link">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Open MailFlow Sentinel
+        </a>
+    </div>
+
+    <div class="footer">
+        Built by Ray Siirila &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com">mailflowsentinel.com</a>
+        &nbsp;&middot;&nbsp;
+        <a href="/about">About</a>
+    </div>
+
+</div>
+</body>
+</html>

@@ -644,6 +644,11 @@ def home(request: Request):
     return templates.TemplateResponse(request=request, name="index.html", context={})
 
 
+@app.get("/about")
+def about(request: Request):
+    return templates.TemplateResponse(request=request, name="about.html", context={})
+
+
 @app.get("/analyze")
 @limiter.limit("10/minute")
 def analyze(request: Request, domain: str):
