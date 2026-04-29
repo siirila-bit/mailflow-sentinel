@@ -363,12 +363,10 @@ def detect_vendor(mx_records):
         return "Mimecast"
     if "proofpoint" in joined:
         return "Proofpoint"
-    if "abnormalsecurity.com" in joined:
-        return "Abnormal Security"
     if "google" in joined or "aspmx" in joined:
         return "Google Workspace"
     if "mail.protection.outlook.com" in joined:
-        return "Microsoft 365"
+        return "Microsoft 365 (Direct)"
     return "Unknown"
 
 
@@ -452,7 +450,7 @@ def evaluate_direct_send(domain, vendor, mx_records, dmarc, msft_dkim):
         if status == "Protected":
             return f"A {vendor} secure email gateway is detected in the MX routing path. Mail must pass through the gateway before reaching the destination server, preventing unauthorized direct delivery."
         if status == "Not Protected" and severity == "high":
-            return "Microsoft 365 MX records are publicly reachable with no gateway detected. No connector restriction has been confirmed from external signals — direct delivery to the EOP endpoint may be possible."
+            return "Microsoft 365 MX records are publicly reachable with no gateway detected. No connector restriction has been confirmed from external signals — direct delivery to the EOP endpoint may be possible. Inline API-based security solutions such as Abnormal Security may be present but are not externally detectable via DNS."
         if status == "Not Protected" and severity == "medium":
             return "A gateway is present in DNS but Microsoft 365 also appears in the routing path. Connector restrictions have not been confirmed — direct delivery bypass to the M365 endpoint may still be possible."
         return "Unable to determine direct send exposure from DNS alone."
@@ -488,7 +486,7 @@ def evaluate_direct_send(domain, vendor, mx_records, dmarc, msft_dkim):
                     "status": "Not Protected",
                     "severity": "high",
                     "reason": f"Microsoft 365 accepted the SMTP envelope at RCPT TO (250 OK) from an external, unauthenticated source at {eop_host}. No connector-level restriction was detected.",
-                    "validation": "Live SMTP probe returned 250 at RCPT TO. Transport rule-based blocking is not detectable externally — additional protection may still be in place post-DATA.",
+                    "validation": "Live SMTP probe returned 250 at RCPT TO. Transport rule-based blocking and inline API-based solutions such as Abnormal Security are not detectable externally — additional protection may still be in place.",
                     "probe": "confirmed",
                     "probe_detail": probe_detail,
                 }
