@@ -1339,6 +1339,9 @@
                 {% else %}
                 <div class="finding-good">No immediate remediation recommendations.</div>
                 {% endif %}
+                <div id="spf-fix-wrapper" style="margin-top:16px;display:none;">
+                    <a id="spf-fix-btn" href="#" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;background:rgba(90,169,255,0.1);border:1px solid rgba(90,169,255,0.25);color:var(--accent);font-weight:600;font-size:13px;text-decoration:none;transition:background 0.15s;" onmouseover="this.style.background='rgba(90,169,255,0.18)'" onmouseout="this.style.background='rgba(90,169,255,0.1)'">Analyze &amp; Fix SPF &#8594;</a>
+                </div>
             </div>
         </div>
 
@@ -1465,6 +1468,21 @@ Analyzed by mailflowsentinel.com
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') { closeSmtpModal(); closeShareModal(); }
         });
+        (function() {
+            var scanEl = document.getElementById('scan-data');
+            if (!scanEl) return;
+            try {
+                var d = JSON.parse(scanEl.textContent);
+                if (d.spf) {
+                    var btn = document.getElementById('spf-fix-btn');
+                    var wrap = document.getElementById('spf-fix-wrapper');
+                    if (btn && wrap) {
+                        btn.href = 'https://ther3boot.com/spf-fix.html?record=' + encodeURIComponent(d.spf);
+                        wrap.style.display = '';
+                    }
+                }
+            } catch(e) {}
+        })();
     </script>
 
     <div style="text-align: center; padding: 20px 0 40px; color: rgba(149,163,191,0.4); font-size: 13px; font-family: Inter, sans-serif;">
