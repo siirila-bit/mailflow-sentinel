@@ -363,6 +363,8 @@ def detect_vendor(mx_records):
         return "Mimecast"
     if "proofpoint" in joined:
         return "Proofpoint"
+    if "abnormalsecurity.com" in joined:
+        return "Abnormal Security"
     if "google" in joined or "aspmx" in joined:
         return "Google Workspace"
     if "mail.protection.outlook.com" in joined:
@@ -548,6 +550,10 @@ def generate_recommendations(spf, dmarc, mta_sts_record, tls_rpt_record, direct_
     fixes = []
     if not spf:
         fixes.append("Add an SPF record to define authorized sending sources.")
+    elif "+all" in spf.split():
+        fixes.append("Remove +all from your SPF record immediately — it authorizes any server on the internet to send as your domain, rendering SPF useless.")
+    elif "?all" in spf.split():
+        fixes.append("Replace ?all with -all in your SPF record — the ?all qualifier is neutral and provides no spoofing protection.")
     if not dmarc:
         fixes.append("Publish a DMARC record to monitor and enforce authentication.")
     elif "p=none" in dmarc.lower():
@@ -619,6 +625,12 @@ def calculate_score(spf, dmarc, spf_lookups, mta_sts_record, tls_rpt_record, dir
     if not spf:
         score -= 25
         findings.append("SPF record missing")
+    elif "+all" in spf.split() or "?all" in spf.split():
+        score -= 15
+        if "+all" in spf.split():
+            findings.append("SPF uses +all — any server on the internet is authorized to send as this domain")
+        else:
+            findings.append("SPF uses ?all — SPF is effectively neutral and provides no protection")
     elif spf_lookups > 10:
         score -= 15
         findings.append("SPF exceeds the 10 DNS lookup limit")
