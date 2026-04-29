@@ -845,6 +845,11 @@
             </form>
         </div>
 
+        <div id="recent-scans" style="display:none;margin-bottom:22px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(149,163,191,0.45);margin-bottom:10px;">Recent Scans</div>
+            <div id="recent-list" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+        </div>
+
         {% if domain %}
         <div class="result-card">
             <div class="topbar">
@@ -1554,6 +1559,36 @@ Analyzed by mailflowsentinel.com
                     }
                 }
             } catch(e) {}
+        })();
+
+        // ── Recent Scans ──────────────────────────────────────────────────────
+        (function() {
+            function _timeAgo(iso) {
+                var s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+                if (s < 60)   return s + 's ago';
+                if (s < 3600) return Math.floor(s / 60) + 'm ago';
+                if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+                return Math.floor(s / 86400) + 'd ago';
+            }
+            function _esc(s) {
+                return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            }
+            fetch('/recent').then(function(r) { return r.json(); }).then(function(scans) {
+                if (!Array.isArray(scans) || !scans.length) return;
+                var wrap = document.getElementById('recent-scans');
+                var list = document.getElementById('recent-list');
+                if (!wrap || !list) return;
+                scans.slice(0, 5).forEach(function(s) {
+                    var a = document.createElement('a');
+                    a.href = '/analyze?domain=' + encodeURIComponent(s.domain);
+                    a.style.cssText = 'display:inline-flex;align-items:center;gap:7px;padding:5px 13px;border-radius:999px;font-size:12px;font-weight:600;color:var(--muted);background:rgba(255,255,255,0.04);border:1px solid var(--border);text-decoration:none;transition:border-color 0.15s,color 0.15s;white-space:nowrap;';
+                    a.innerHTML = _esc(s.domain) + '<span style="font-weight:400;opacity:0.55;">' + _esc(_timeAgo(s.scanned_at)) + '</span>';
+                    a.addEventListener('mouseover', function() { this.style.borderColor='rgba(90,169,255,0.3)'; this.style.color='var(--accent)'; });
+                    a.addEventListener('mouseout',  function() { this.style.borderColor='var(--border)'; this.style.color='var(--muted)'; });
+                    list.appendChild(a);
+                });
+                wrap.style.display = '';
+            }).catch(function() {});
         })();
     </script>
 

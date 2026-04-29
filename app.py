@@ -20,8 +20,10 @@ PROBE_URL = "http://144.202.103.114:8001/probe"
 REPORTS_DIR = "/opt/mailflow/reports"
 os.makedirs(REPORTS_DIR, exist_ok=True)
 SCAN_COUNT_FILE = "/opt/mailflow/scan_count.txt"
+RECENT_SCANS_FILE = "/opt/mailflow/recent_scans.json"
 
 _scan_count_lock = threading.Lock()
+_recent_scans_lock = threading.Lock()
 
 def _increment_scan_count():
     with _scan_count_lock:
@@ -32,6 +34,21 @@ def _increment_scan_count():
             count = 0
         with open(SCAN_COUNT_FILE, "w") as f:
             f.write(str(count + 1))
+
+
+def _append_recent_scan(domain: str):
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    entry = {"domain": domain, "scanned_at": ts}
+    with _recent_scans_lock:
+        try:
+            with open(RECENT_SCANS_FILE) as f:
+                scans = json.load(f)
+        except (FileNotFoundError, ValueError, json.JSONDecodeError):
+            scans = []
+        scans.insert(0, entry)
+        scans = scans[:10]
+        with open(RECENT_SCANS_FILE, "w") as f:
+            json.dump(scans, f)
 
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
@@ -755,6 +772,16 @@ def stats_route():
     return {"scans": count}
 
 
+@app.get("/recent")
+def recent_route():
+    try:
+        with open(RECENT_SCANS_FILE) as f:
+            scans = json.load(f)
+    except (FileNotFoundError, ValueError, json.JSONDecodeError):
+        scans = []
+    return scans
+
+
 @app.get("/robots.txt")
 def robots():
     return FileResponse("/opt/mailflow/robots.txt")
@@ -867,6 +894,12 @@ async def analyze(request: Request, domain: str):
         tls_rpt_record, direct_send["status"], msft_dkim, catch_all["status"], dkim_results,
     )
 
+    if vendor == "Microsoft 365 (Direct)":
+        findings.append(
+            "Microsoft Defender for Office 365 (MDO) may be the only email security layer"
+            " — inline API-based solutions are not externally detectable."
+        )
+
     score_summary = build_score_summary(
         score, spf, dmarc, dkim_present, mta_sts_record, direct_send["status"], findings
     )
@@ -890,6 +923,7 @@ async def analyze(request: Request, domain: str):
     scan_data_json = json.dumps(share_data).replace("</", r"</")
 
     await asyncio.to_thread(_increment_scan_count)
+    await asyncio.to_thread(_append_recent_scan, domain)
 
     return templates.TemplateResponse(
         request=request,
