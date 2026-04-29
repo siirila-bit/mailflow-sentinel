@@ -688,7 +688,7 @@ def _probe_relay(domain: str) -> dict:
     result = {"status": "Unknown", "reason": "", "mx_tested": [], "tls_versions": [], "banners": []}
     try:
         relay_url = f"http://144.202.103.114:8001/relay?domain={urllib.parse.quote(domain)}"
-        with urllib.request.urlopen(relay_url, timeout=20) as resp:
+        with urllib.request.urlopen(relay_url, timeout=8) as resp:
             relay_data = json.loads(resp.read().decode())
         result["status"] = relay_data.get("status", "Unknown")
         result["reason"] = relay_data.get("reason", "")
@@ -707,7 +707,7 @@ def _probe_relay(domain: str) -> dict:
 def _probe_subdomains(domain: str) -> dict:
     try:
         sub_url = f"http://144.202.103.114:8001/subdomains?domain={urllib.parse.quote(domain)}"
-        with urllib.request.urlopen(sub_url, timeout=30) as resp:
+        with urllib.request.urlopen(sub_url, timeout=8) as resp:
             return json.loads(resp.read().decode())
     except Exception:
         return {"subdomains_found": 0, "open_relays_found": 0, "open_relay_hosts": [], "results": []}
