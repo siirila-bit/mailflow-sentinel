@@ -1339,8 +1339,13 @@
                 {% else %}
                 <div class="finding-good">No immediate remediation recommendations.</div>
                 {% endif %}
-                <div id="spf-fix-wrapper" style="margin-top:16px;display:none;">
-                    <a id="spf-fix-btn" href="#" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;background:rgba(90,169,255,0.1);border:1px solid rgba(90,169,255,0.25);color:var(--accent);font-weight:600;font-size:13px;text-decoration:none;transition:background 0.15s;" onmouseover="this.style.background='rgba(90,169,255,0.18)'" onmouseout="this.style.background='rgba(90,169,255,0.1)'">Analyze &amp; Fix SPF &#8594;</a>
+                <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;">
+                    <div id="spf-fix-wrapper" style="display:none;">
+                        <a id="spf-fix-btn" href="#" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;background:rgba(90,169,255,0.1);border:1px solid rgba(90,169,255,0.25);color:var(--accent);font-weight:600;font-size:13px;text-decoration:none;transition:background 0.15s;" onmouseover="this.style.background='rgba(90,169,255,0.18)'" onmouseout="this.style.background='rgba(90,169,255,0.1)'">Analyze &amp; Fix SPF &#8594;</a>
+                    </div>
+                    <div id="dmarc-fix-wrapper" style="display:none;">
+                        <a id="dmarc-fix-btn" href="#" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;background:rgba(39,194,129,0.1);border:1px solid rgba(39,194,129,0.25);color:#27c281;font-weight:600;font-size:13px;text-decoration:none;transition:background 0.15s;" onmouseover="this.style.background='rgba(39,194,129,0.18)'" onmouseout="this.style.background='rgba(39,194,129,0.1)'">Analyze &amp; Fix DMARC &#8594;</a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1479,6 +1484,14 @@ Analyzed by mailflowsentinel.com
                     if (btn && wrap) {
                         btn.href = 'https://ther3boot.com/spf-fix.html?record=' + encodeURIComponent(d.spf);
                         wrap.style.display = '';
+                    }
+                }
+                if (d.dmarc) {
+                    var dmarcBtn = document.getElementById('dmarc-fix-btn');
+                    var dmarcWrap = document.getElementById('dmarc-fix-wrapper');
+                    if (dmarcBtn && dmarcWrap) {
+                        dmarcBtn.href = 'https://ther3boot.com/dmarc-analyzer.html?record=' + encodeURIComponent(d.dmarc);
+                        dmarcWrap.style.display = '';
                     }
                 }
             } catch(e) {}
