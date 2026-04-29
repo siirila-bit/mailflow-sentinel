@@ -324,10 +324,44 @@
             overflow-wrap: break-word;
         }
 
+        .record-box { position: relative; }
+
         .record-box code {
             display: block;
             white-space: pre;
             overflow-wrap: normal;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            padding: 4px 5px;
+            border-radius: 6px;
+            border: 1px solid transparent;
+            background: transparent;
+            color: transparent;
+            cursor: pointer;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+        }
+        .record-box:hover .copy-btn {
+            color: var(--muted);
+            border-color: rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.05);
+        }
+        .copy-btn:hover {
+            color: var(--text) !important;
+            background: rgba(255,255,255,0.1) !important;
+            border-color: rgba(255,255,255,0.18) !important;
+        }
+        .copy-btn.copied {
+            color: var(--good) !important;
+            border-color: rgba(39,194,129,0.35) !important;
+            background: rgba(39,194,129,0.1) !important;
         }
 
         code {
@@ -974,6 +1008,7 @@
                     <p class="section-sub">These records show where the domain receives email.</p>
                     {% if mx %}
                     <div class="record-box">
+                        <button class="copy-btn" onclick="copyRecordBox(this)" title="Copy to clipboard" aria-label="Copy to clipboard"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
                         {% for m in mx %}<div><code>{{ m }}</code></div>{% endfor %}
                     </div>
                     {% else %}
@@ -985,7 +1020,7 @@
                     <h3 class="section-title">SPF</h3>
                     <p class="section-sub">SPF defines which mail servers are allowed to send on behalf of the domain.</p>
                     {% if spf %}
-                    <div class="record-box"><code>{{ spf }}</code></div>
+                    <div class="record-box"><button class="copy-btn" onclick="copyRecordBox(this)" title="Copy to clipboard" aria-label="Copy to clipboard"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button><code>{{ spf }}</code></div>
                     <p class="muted" style="margin-top: 12px;">SPF lookups: <strong>{{ spf_lookups }}</strong></p>
                     {% else %}
                     <p class="muted">No SPF record found.</p>
@@ -998,7 +1033,7 @@
                     <h3 class="section-title">DMARC</h3>
                     <p class="section-sub">DMARC tells receiving mail systems what to do when SPF or DKIM checks fail.</p>
                     {% if dmarc %}
-                    <div class="record-box"><code>{{ dmarc }}</code></div>
+                    <div class="record-box"><button class="copy-btn" onclick="copyRecordBox(this)" title="Copy to clipboard" aria-label="Copy to clipboard"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button><code>{{ dmarc }}</code></div>
                     {% else %}
                     <p class="muted">No DMARC record found.</p>
                     {% endif %}
@@ -1032,6 +1067,7 @@
                 <p class="section-sub">Verifies that email is authorized by the domain and was not altered in transit.</p>
 
                 <div class="record-box">
+                    <button class="copy-btn" onclick="copyRecordBox(this)" title="Copy to clipboard" aria-label="Copy to clipboard"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
                     <div style="margin-bottom: 16px;">
                         <strong>Status:</strong>
                         {% if dkim_present %}
@@ -1083,7 +1119,7 @@
 
                     {% if mta_sts_record %}
                     <p><strong>DNS record</strong></p>
-                    <div class="record-box"><code>{{ mta_sts_record }}</code></div>
+                    <div class="record-box"><button class="copy-btn" onclick="copyRecordBox(this)" title="Copy to clipboard" aria-label="Copy to clipboard"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button><code>{{ mta_sts_record }}</code></div>
                     {% else %}
                     <p class="muted">DNS record missing.</p>
                     {% endif %}
@@ -1104,7 +1140,7 @@
                     <h3 class="section-title">TLS-RPT</h3>
                     <p class="section-sub">TLS-RPT enables reporting of SMTP TLS and MTA-STS delivery failures.</p>
                     {% if tls_rpt_record %}
-                    <div class="record-box"><code>{{ tls_rpt_record }}</code></div>
+                    <div class="record-box"><button class="copy-btn" onclick="copyRecordBox(this)" title="Copy to clipboard" aria-label="Copy to clipboard"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button><code>{{ tls_rpt_record }}</code></div>
                     {% else %}
                     <p class="muted">TLS-RPT record missing.</p>
                     {% endif %}
@@ -1116,7 +1152,7 @@
                 <h3 class="section-title">BIMI</h3>
                 <p class="section-sub">Brand Indicators for Message Identification allows verified brand logos to appear in supporting email clients. Requires DMARC enforcement at reject or quarantine.</p>
                 {% if bimi_record %}
-                <div class="record-box"><code>{{ bimi_record }}</code></div>
+                <div class="record-box"><button class="copy-btn" onclick="copyRecordBox(this)" title="Copy to clipboard" aria-label="Copy to clipboard"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button><code>{{ bimi_record }}</code></div>
                 <p class="muted" style="margin-top:12px;">BIMI record detected. Brand logo display is supported in Gmail, Apple Mail, and Yahoo Mail for senders with a Verified Mark Certificate (VMC).</p>
                 {% else %}
                 <p class="muted">No BIMI record found at <code>default._bimi.{{ domain }}</code>.</p>
@@ -1412,6 +1448,29 @@ Analyzed by mailflowsentinel.com
     </div>
 
     <script>
+        var _COPY_SVG  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>';
+        var _CHECK_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+        function copyRecordBox(btn) {
+            var box = btn.closest('.record-box');
+            var codes = box.querySelectorAll('code');
+            var text;
+            if (codes.length === 1) {
+                text = codes[0].innerText.trim();
+            } else if (codes.length > 1) {
+                text = Array.from(codes).map(function(c) { return c.innerText.trim(); }).join('\n');
+            } else {
+                text = box.innerText.trim();
+            }
+            navigator.clipboard.writeText(text).then(function() {
+                btn.innerHTML = _CHECK_SVG;
+                btn.classList.add('copied');
+                setTimeout(function() {
+                    btn.innerHTML = _COPY_SVG;
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+
         async function copyShareLink(btn) {
             const raw = document.getElementById('scan-data');
             if (!raw) return;
