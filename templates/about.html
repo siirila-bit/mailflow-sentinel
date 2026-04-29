@@ -191,6 +191,8 @@
     <h1 class="page-title"><span>MailFlow</span> Sentinel</h1>
     <p class="tagline">Real-time email security analysis for practitioners — not dashboards.</p>
 
+    <p id="scan-stat" style="margin:-28px 0 40px;font-size:14px;color:rgba(149,163,191,0.45);"><span id="scan-count">—</span> domains analyzed</p>
+
     <div class="card">
         <h2>What this is</h2>
         <p>
@@ -292,5 +294,10 @@
     </div>
 
 </div>
+<script>
+fetch("/stats").then(r => r.json()).then(d => {
+    document.getElementById("scan-count").textContent = d.scans.toLocaleString();
+}).catch(() => {});
+</script>
 </body>
 </html>

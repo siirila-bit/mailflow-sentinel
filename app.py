@@ -11,6 +11,7 @@ import ssl
 import asyncio
 import json
 import re
+import threading
 import uuid
 import os
 from datetime import datetime, timezone
@@ -18,6 +19,19 @@ from datetime import datetime, timezone
 PROBE_URL = "http://144.202.103.114:8001/probe"
 REPORTS_DIR = "/opt/mailflow/reports"
 os.makedirs(REPORTS_DIR, exist_ok=True)
+SCAN_COUNT_FILE = "/opt/mailflow/scan_count.txt"
+
+_scan_count_lock = threading.Lock()
+
+def _increment_scan_count():
+    with _scan_count_lock:
+        try:
+            with open(SCAN_COUNT_FILE) as f:
+                count = int(f.read().strip() or 0)
+        except (FileNotFoundError, ValueError):
+            count = 0
+        with open(SCAN_COUNT_FILE, "w") as f:
+            f.write(str(count + 1))
 
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
@@ -731,6 +745,16 @@ def _probe_subdomains(domain: str) -> dict:
         return {"subdomains_found": 0, "open_relays_found": 0, "open_relay_hosts": [], "results": []}
 
 
+@app.get("/stats")
+def stats_route():
+    try:
+        with open(SCAN_COUNT_FILE) as f:
+            count = int(f.read().strip() or 0)
+    except (FileNotFoundError, ValueError):
+        count = 0
+    return {"scans": count}
+
+
 @app.get("/robots.txt")
 def robots():
     return FileResponse("/opt/mailflow/robots.txt")
@@ -864,6 +888,8 @@ async def analyze(request: Request, domain: str):
         "fingerprint": fingerprint, "subdomain_data": subdomain_data,
     }
     scan_data_json = json.dumps(share_data).replace("</", r"</")
+
+    await asyncio.to_thread(_increment_scan_count)
 
     return templates.TemplateResponse(
         request=request,
