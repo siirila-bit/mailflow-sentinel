@@ -552,10 +552,19 @@ def generate_recommendations(spf, dmarc, mta_sts_record, tls_rpt_record, direct_
         fixes.append("Remove +all from your SPF record immediately — it authorizes any server on the internet to send as your domain, rendering SPF useless.")
     elif "?all" in spf.split():
         fixes.append("Replace ?all with -all in your SPF record — the ?all qualifier is neutral and provides no spoofing protection.")
+    elif "~all" in spf.split():
+        fixes.append("Harden your SPF record from ~all (softfail) to -all (hardfail) for full enforcement against unauthorized senders.")
     if not dmarc:
         fixes.append("Publish a DMARC record to monitor and enforce authentication.")
     elif "p=none" in dmarc.lower():
         fixes.append("Move DMARC from p=none to quarantine or reject for stronger spoof protection.")
+    if dmarc:
+        _rua_match = re.search(r'rua=([^;]+)', dmarc, re.IGNORECASE)
+        if _rua_match:
+            _rua_domains = re.findall(r'mailto:[^@]+@([^\s,>!]+)', _rua_match.group(1), re.IGNORECASE)
+            _vendor_rua = {'barracudanetworks.com', 'agari.com', 'dmarcian.com', 'valimail.com', 'proofpoint.com'}
+            if _rua_domains and all(d.lower() in _vendor_rua for d in _rua_domains):
+                fixes.append("Add your own domain's address to the DMARC rua= tag so you receive aggregate reports directly, not only through your vendor.")
     vendor_lower = vendor.lower()
     if not msft_dkim["enabled"] and ("microsoft" in vendor_lower or "365" in vendor_lower):
         fixes.append("Enable Microsoft 365 DKIM if Microsoft 365 is used for primary user mail.")
@@ -629,6 +638,9 @@ def calculate_score(spf, dmarc, spf_lookups, mta_sts_record, tls_rpt_record, dir
             findings.append("SPF uses +all — any server on the internet is authorized to send as this domain")
         else:
             findings.append("SPF uses ?all — SPF is effectively neutral and provides no protection")
+    elif "~all" in spf.split():
+        score -= 5
+        findings.append("SPF uses ~all (softfail) — unauthorized senders may still be delivered; harden to -all for full enforcement")
     elif spf_lookups > 10:
         score -= 15
         findings.append("SPF exceeds the 10 DNS lookup limit")
@@ -642,6 +654,14 @@ def calculate_score(spf, dmarc, spf_lookups, mta_sts_record, tls_rpt_record, dir
     elif "p=none" in dmarc.lower():
         score -= 18
         findings.append("DMARC is monitor-only (p=none)")
+
+    if dmarc:
+        _rua_match = re.search(r'rua=([^;]+)', dmarc, re.IGNORECASE)
+        if _rua_match:
+            _rua_domains = re.findall(r'mailto:[^@]+@([^\s,>!]+)', _rua_match.group(1), re.IGNORECASE)
+            _vendor_rua = {'barracudanetworks.com', 'agari.com', 'dmarcian.com', 'valimail.com', 'proofpoint.com'}
+            if _rua_domains and all(d.lower() in _vendor_rua for d in _rua_domains):
+                findings.append("DMARC rua= only points to vendor-managed addresses — you may not be receiving your own DMARC reports directly")
 
     if not msft_dkim["enabled"]:
         score -= 15
