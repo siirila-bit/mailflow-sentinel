@@ -879,6 +879,8 @@
 
                             {% if dmarc and "reject" in dmarc.lower() %}
                                 <span class="badge badge-good"><span class="dot"></span>DMARC Reject</span>
+                            {% elif dmarc and "quarantine" in dmarc.lower() %}
+                                <span class="badge badge-warn"><span class="dot"></span>DMARC Quarantine</span>
                             {% elif dmarc %}
                                 <span class="badge badge-warn"><span class="dot"></span>DMARC None</span>
                             {% else %}
@@ -1051,12 +1053,10 @@
                     <ul class="clean">
                         {% for f in findings %}
                         <li>
-                            {% if "missing" in f.lower() %}
+                            {% if "missing" in f.lower() or "+all" in f or "?all" in f or "open relay" in f.lower() %}
                                 <span class="finding-bad">{{ f }}</span>
-                            {% elif "none" in f.lower() or "validation" in f.lower() or "high" in f.lower() %}
-                                <span class="finding-warn">{{ f }}</span>
                             {% else %}
-                                <span class="finding-good">{{ f }}</span>
+                                <span class="finding-warn">{{ f }}</span>
                             {% endif %}
                         </li>
                         {% endfor %}
@@ -1510,8 +1510,8 @@ Analyzed by mailflowsentinel.com
         }
 
         function closeShareModal(e) {
-            if (!e || e.target === document.getElementById('share-modal'))
-                document.getElementById('share-modal').classList.remove('open');
+            var el = document.getElementById('share-modal');
+            if (el && (!e || e.target === el)) el.classList.remove('open');
         }
 
         function copyReport(btn) {
@@ -1527,12 +1527,12 @@ Analyzed by mailflowsentinel.com
         }
 
         function openSmtpModal() {
-            document.getElementById('smtp-modal').classList.add('open');
+            var el = document.getElementById('smtp-modal');
+            if (el) el.classList.add('open');
         }
         function closeSmtpModal(e) {
-            if (!e || e.target === document.getElementById('smtp-modal')) {
-                document.getElementById('smtp-modal').classList.remove('open');
-            }
+            var el = document.getElementById('smtp-modal');
+            if (el && (!e || e.target === el)) el.classList.remove('open');
         }
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') { closeSmtpModal(); closeShareModal(); }
@@ -1593,7 +1593,7 @@ Analyzed by mailflowsentinel.com
     </script>
 
     <div style="text-align: center; padding: 20px 0 40px; color: rgba(149,163,191,0.4); font-size: 13px; font-family: Inter, sans-serif;">
-        Reboot Labs &nbsp;&middot;&nbsp; <a href="https://mailflowsentinel.com" style="color: rgba(90,169,255,0.4); text-decoration: none;">mailflowsentinel.com</a> &nbsp;&middot;&nbsp; <a href="https://ther3boot.com/spf-fix.html" style="color: rgba(90,169,255,0.4); text-decoration: none;">SPF Analyzer</a> &nbsp;&middot;&nbsp; <a href="https://ther3boot.com/dmarc-analyzer.html" style="color: rgba(90,169,255,0.4); text-decoration: none;">DMARC Analyzer</a>
+        Reboot Labs &nbsp;&middot;&nbsp; <a href="https://mailflowsentinel.com" style="color: rgba(90,169,255,0.4); text-decoration: none;">mailflowsentinel.com</a> &nbsp;&middot;&nbsp; <a href="https://ther3boot.com/spf-fix.html" style="color: rgba(90,169,255,0.4); text-decoration: none;">SPF Analyzer</a> &nbsp;&middot;&nbsp; <a href="https://ther3boot.com/dmarc-analyzer.html" style="color: rgba(90,169,255,0.4); text-decoration: none;">DMARC Analyzer</a> &nbsp;&middot;&nbsp; <a href="https://ther3boot.com/email-header-analyzer.html" style="color: rgba(90,169,255,0.4); text-decoration: none;">Header Analyzer</a>
     </div>
 
 

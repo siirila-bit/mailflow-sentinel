@@ -6,6 +6,10 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import dns.resolver
 import urllib.request
+
+dns.resolver.default_resolver = dns.resolver.Resolver()
+dns.resolver.default_resolver.timeout = 3
+dns.resolver.default_resolver.lifetime = 5
 import urllib.parse
 import ssl
 import asyncio
@@ -16,7 +20,8 @@ import uuid
 import os
 from datetime import datetime, timezone
 
-PROBE_URL = "http://144.202.103.114:8001/probe"
+PROBE_BASE = "http://localhost:8001"
+PROBE_URL = f"{PROBE_BASE}/probe"
 REPORTS_DIR = "/opt/mailflow/reports"
 os.makedirs(REPORTS_DIR, exist_ok=True)
 SCAN_COUNT_FILE = "/opt/mailflow/scan_count.txt"
@@ -555,7 +560,7 @@ def evaluate_direct_send(domain, vendor, mx_records, dmarc, msft_dkim):
 
 def evaluate_catch_all(domain: str) -> dict:
     try:
-        url = f"http://144.202.103.114:8001/catchall?domain={urllib.parse.quote(domain)}"
+        url = f"{PROBE_BASE}/catchall?domain={urllib.parse.quote(domain)}"
         with urllib.request.urlopen(url, timeout=15) as resp:
             data = json.loads(resp.read().decode())
         return {
@@ -736,7 +741,7 @@ def calculate_score(spf, dmarc, spf_lookups, mta_sts_record, tls_rpt_record, dir
 def _probe_relay(domain: str) -> dict:
     result = {"status": "Unknown", "reason": "", "mx_tested": [], "tls_versions": [], "banners": []}
     try:
-        relay_url = f"http://144.202.103.114:8001/relay?domain={urllib.parse.quote(domain)}"
+        relay_url = f"{PROBE_BASE}/relay?domain={urllib.parse.quote(domain)}"
         with urllib.request.urlopen(relay_url, timeout=8) as resp:
             relay_data = json.loads(resp.read().decode())
         result["status"] = relay_data.get("status", "Unknown")
@@ -755,7 +760,7 @@ def _probe_relay(domain: str) -> dict:
 
 def _probe_subdomains(domain: str) -> dict:
     try:
-        sub_url = f"http://144.202.103.114:8001/subdomains?domain={urllib.parse.quote(domain)}"
+        sub_url = f"{PROBE_BASE}/subdomains?domain={urllib.parse.quote(domain)}"
         with urllib.request.urlopen(sub_url, timeout=8) as resp:
             return json.loads(resp.read().decode())
     except Exception:
@@ -763,7 +768,8 @@ def _probe_subdomains(domain: str) -> dict:
 
 
 @app.get("/stats")
-def stats_route():
+@limiter.limit("60/minute")
+async def stats_route(request: Request):
     try:
         with open(SCAN_COUNT_FILE) as f:
             count = int(f.read().strip() or 0)
@@ -773,7 +779,8 @@ def stats_route():
 
 
 @app.get("/recent")
-def recent_route():
+@limiter.limit("60/minute")
+async def recent_route(request: Request):
     try:
         with open(RECENT_SCANS_FILE) as f:
             scans = json.load(f)
@@ -920,7 +927,7 @@ async def analyze(request: Request, domain: str):
         "report_date": report_date, "open_relay": open_relay,
         "fingerprint": fingerprint, "subdomain_data": subdomain_data,
     }
-    scan_data_json = json.dumps(share_data).replace("</", r"</")
+    scan_data_json = json.dumps(share_data).replace("</", r"<\/")
 
     await asyncio.to_thread(_increment_scan_count)
     await asyncio.to_thread(_append_recent_scan, domain)
