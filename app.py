@@ -559,6 +559,19 @@ def evaluate_catch_all(domain: str) -> dict:
 _VENDOR_RUA = {'barracudanetworks.com', 'agari.com', 'dmarcian.com', 'valimail.com', 'proofpoint.com'}
 
 
+def parse_dmarc_pct(dmarc):
+    if not dmarc:
+        return 100
+    for tag in dmarc.split(';'):
+        tag = tag.strip()
+        if tag.lower().startswith('pct='):
+            try:
+                return int(tag.split('=', 1)[1].strip())
+            except ValueError:
+                pass
+    return 100
+
+
 def _is_vendor_only_rua(dmarc: str | None) -> bool:
     if not dmarc:
         return False
@@ -583,6 +596,8 @@ def generate_recommendations(spf, dmarc, mta_sts_record, tls_rpt_record, direct_
         fixes.append("Publish a DMARC record to monitor and enforce authentication.")
     elif "p=none" in dmarc.lower():
         fixes.append("Move DMARC from p=none to quarantine or reject for stronger spoof protection.")
+    if dmarc and parse_dmarc_pct(dmarc) < 100:
+        fixes.append('Set pct=100 in your DMARC record to apply the policy to all mail.')
     if _is_vendor_only_rua(dmarc):
         fixes.append("Add your own domain's address to the DMARC rua= tag so you receive aggregate reports directly, not only through your vendor.")
     vendor_lower = vendor.lower()
@@ -674,6 +689,17 @@ def calculate_score(spf, dmarc, spf_lookups, mta_sts_record, tls_rpt_record, dir
     elif "p=none" in dmarc.lower():
         score -= 18
         findings.append("DMARC is monitor-only (p=none)")
+
+    dmarc_pct = parse_dmarc_pct(dmarc)
+    if dmarc and dmarc_pct < 100:
+        if dmarc_pct <= 25:
+            score -= 20
+        else:
+            score -= 10
+        findings.append(
+            f'DMARC policy only applies to {dmarc_pct}% of mail'
+            ' — pct=100 required for full enforcement'
+        )
 
     if _is_vendor_only_rua(dmarc):
         findings.append("DMARC rua= only points to vendor-managed addresses — you may not be receiving your own DMARC reports directly")
