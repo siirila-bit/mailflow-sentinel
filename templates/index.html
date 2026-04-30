@@ -703,6 +703,11 @@
             /* Print header */
             .print-header { display: block !important; }
 
+
+            /* What This Means */
+            .wtm { border-top: 1px solid #e2e8f0 !important; padding-top: 14px !important; }
+            .wtm-label { color: #64748b !important; }
+            .wtm-text { color: #334155 !important; }
             /* Title */
             .title { color: #1e293b !important; font-size: 28pt !important; }
             .title span { -webkit-text-fill-color: #1e40af !important; }
@@ -818,6 +823,27 @@
             flex: 1; padding: 10px 12px; border-radius: 10px;
             border: 1px solid var(--border); background: rgba(255,255,255,0.04);
             color: var(--text); font-size: 13px; font-family: monospace; outline: none;
+        }
+
+        /* ── What This Means ──────────────────────────────────────────── */
+        .wtm {
+            border-top: 1px solid var(--border);
+            padding-top: 20px;
+            margin-bottom: 4px;
+        }
+        .wtm-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+        .wtm-text {
+            font-size: 14px;
+            line-height: 1.65;
+            color: rgba(232, 237, 247, 0.82);
+            margin: 0;
         }
     </style>
 </head>
@@ -945,6 +971,39 @@
                     </div>
                     <div class="score-note">{{ score_summary }}</div>
                 </div>
+            </div>
+
+            <div class="wtm">
+                <div class="wtm-label">What this means</div>
+                <p class="wtm-text">
+                    {% if not dmarc and not spf %}
+                        Anyone on the internet can send email that appears to come from {{ domain }} &mdash; with neither SPF nor DMARC configured, receiving servers have no authentication signals to act on.
+                    {% elif not dmarc %}
+                        Without a DMARC policy, receiving servers have no instruction to reject or quarantine email spoofed as {{ domain }}, leaving impersonation largely unchallenged even where SPF is configured.
+                    {% elif 'p=none' in dmarc.lower() %}
+                        DMARC is set to monitor only, so spoofed email claiming to come from {{ domain }} still reaches inboxes &mdash; the policy collects data but does nothing to block delivery.
+                    {% elif 'p=quarantine' in dmarc.lower() %}
+                        A DMARC quarantine policy is active, so most spoofed email from {{ domain }} should route to spam, though some recipients may still receive it depending on how strictly their provider applies the policy.
+                    {% else %}
+                        DMARC reject is enforced, instructing receivers to block email that fails authentication before it reaches any inbox &mdash; the strongest available protection against impersonation of {{ domain }}.
+                    {% endif %}
+                    {% if direct_send.status == 'Not Protected' %}
+                        The Microsoft 365 direct-send endpoint appears reachable without connector restrictions, which may let an attacker bypass your gateway entirely.
+                    {% elif dkim_present and spf and dmarc and 'reject' in dmarc.lower() %}
+                        SPF, DKIM, and DMARC are all deployed &mdash; the core authentication stack is complete.
+                    {% elif dkim_present and spf %}
+                        SPF and DKIM are configured, providing a partial authentication baseline.
+                    {% elif spf %}
+                        SPF is present but DKIM is missing, leaving the authentication chain incomplete.
+                    {% elif dkim_present %}
+                        DKIM is active but SPF is absent, leaving sender authorization incomplete.
+                    {% else %}
+                        Email authentication is critically incomplete &mdash; multiple core controls are absent.
+                    {% endif %}
+                    {% if recommended_fixes %}
+                        Priority action: {{ recommended_fixes[0] }}
+                    {% endif %}
+                </p>
             </div>
 
             <div class="overview-grid">
