@@ -162,38 +162,6 @@ def estimate_dkim_bits(record: str | None):
         return None
 
 
-def check_common_dkim(domain: str):
-    selectors = [
-        "selector1", "selector2", "default", "dkim", "s1", "s2",
-        "mail", "email", "smtp", "mta", "google", "k1", "k2", "key1", "key2",
-    ]
-    results = []
-    for selector in selectors:
-        record = get_dkim_record(selector, domain)
-        host = f"{selector}._domainkey.{domain}"
-        if selector == "selector1":
-            label = "Microsoft 365 (Primary)"
-        elif selector == "selector2":
-            label = "Microsoft 365 (Secondary)"
-        elif selector == "google":
-            label = "Google"
-        elif selector in ["s1", "s2"]:
-            label = "SendGrid"
-        else:
-            label = "Common Selector"
-        bits = estimate_dkim_bits(record)
-        results.append({
-            "selector": selector,
-            "host": host,
-            "label": label,
-            "found": bool(record),
-            "record": record,
-            "bits": bits,
-            "weak": bool(record) and bits == 1024,
-        })
-    return results
-
-
 async def check_common_dkim_async(domain: str) -> list:
     selectors = [
         "selector1", "selector2", "default", "dkim", "s1", "s2",
@@ -237,9 +205,17 @@ def detect_msft_dkim(dkim_results):
     }
 
 
-def infer_dkim_signing_authority(vendor: str, dkim_results, msft_dkim):
+def infer_dkim_signing_authority(vendor: str, dkim_results, msft_dkim, email_senders=None):
     google_found = any(item["selector"] == "google" and item["found"] for item in dkim_results)
     sendgrid_found = any(item["selector"] in ["s1", "s2"] and item["found"] for item in dkim_results)
+
+    # Supplement with CNAME-derived vendor signals already collected by detect_email_senders
+    if email_senders:
+        esp_names = {s["name"] for s in email_senders}
+        if "Google Workspace" in esp_names:
+            google_found = True
+        if "SendGrid" in esp_names:
+            sendgrid_found = True
 
     if msft_dkim["enabled"]:
         return {
@@ -364,7 +340,7 @@ def _expand_spf_includes(spf_record: str | None, depth: int = 0) -> list[str]:
     return includes
 
 
-def detect_email_senders(domain: str, spf: str | None) -> list[dict]:
+async def detect_email_senders(domain: str, spf: str | None) -> list[dict]:
     seen: dict[str, dict] = {}
 
     def _add(esp_name: str, signal: str):
@@ -373,15 +349,15 @@ def detect_email_senders(domain: str, spf: str | None) -> list[dict]:
         if signal not in seen[esp_name]["signals"]:
             seen[esp_name]["signals"].append(signal)
 
-    # SPF includes (with redirect= following)
+    # SPF includes (with redirect= following) — sequential, typically few lookups
     for inc in _expand_spf_includes(spf):
         for esp in _match_esps(inc):
             _add(esp, f"SPF include:{inc}")
 
-    # DKIM selector CNAMEs
-    for sel in _DKIM_SELECTORS:
-        name = f"{sel}._domainkey.{domain}"
-        cname = get_cname(name)
+    # DKIM selector CNAMEs — all 15 in parallel
+    names = [f"{sel}._domainkey.{domain}" for sel in _DKIM_SELECTORS]
+    cnames = await asyncio.gather(*[asyncio.to_thread(get_cname, name) for name in names])
+    for name, cname in zip(names, cnames):
         if cname:
             for esp in _match_esps(cname):
                 _add(esp, f"{name} → {cname}")
@@ -580,6 +556,19 @@ def evaluate_catch_all(domain: str) -> dict:
         }
 
 
+_VENDOR_RUA = {'barracudanetworks.com', 'agari.com', 'dmarcian.com', 'valimail.com', 'proofpoint.com'}
+
+
+def _is_vendor_only_rua(dmarc: str | None) -> bool:
+    if not dmarc:
+        return False
+    m = re.search(r'rua=([^;]+)', dmarc, re.IGNORECASE)
+    if not m:
+        return False
+    domains = re.findall(r'mailto:[^@]+@([^\s,>!]+)', m.group(1), re.IGNORECASE)
+    return bool(domains) and all(d.lower() in _VENDOR_RUA for d in domains)
+
+
 def generate_recommendations(spf, dmarc, mta_sts_record, tls_rpt_record, direct_send, catch_all, msft_dkim, vendor="", dkim_results=None):
     fixes = []
     if not spf:
@@ -594,13 +583,8 @@ def generate_recommendations(spf, dmarc, mta_sts_record, tls_rpt_record, direct_
         fixes.append("Publish a DMARC record to monitor and enforce authentication.")
     elif "p=none" in dmarc.lower():
         fixes.append("Move DMARC from p=none to quarantine or reject for stronger spoof protection.")
-    if dmarc:
-        _rua_match = re.search(r'rua=([^;]+)', dmarc, re.IGNORECASE)
-        if _rua_match:
-            _rua_domains = re.findall(r'mailto:[^@]+@([^\s,>!]+)', _rua_match.group(1), re.IGNORECASE)
-            _vendor_rua = {'barracudanetworks.com', 'agari.com', 'dmarcian.com', 'valimail.com', 'proofpoint.com'}
-            if _rua_domains and all(d.lower() in _vendor_rua for d in _rua_domains):
-                fixes.append("Add your own domain's address to the DMARC rua= tag so you receive aggregate reports directly, not only through your vendor.")
+    if _is_vendor_only_rua(dmarc):
+        fixes.append("Add your own domain's address to the DMARC rua= tag so you receive aggregate reports directly, not only through your vendor.")
     vendor_lower = vendor.lower()
     if not msft_dkim["enabled"] and ("microsoft" in vendor_lower or "365" in vendor_lower):
         fixes.append("Enable Microsoft 365 DKIM if Microsoft 365 is used for primary user mail.")
@@ -691,13 +675,8 @@ def calculate_score(spf, dmarc, spf_lookups, mta_sts_record, tls_rpt_record, dir
         score -= 18
         findings.append("DMARC is monitor-only (p=none)")
 
-    if dmarc:
-        _rua_match = re.search(r'rua=([^;]+)', dmarc, re.IGNORECASE)
-        if _rua_match:
-            _rua_domains = re.findall(r'mailto:[^@]+@([^\s,>!]+)', _rua_match.group(1), re.IGNORECASE)
-            _vendor_rua = {'barracudanetworks.com', 'agari.com', 'dmarcian.com', 'valimail.com', 'proofpoint.com'}
-            if _rua_domains and all(d.lower() in _vendor_rua for d in _rua_domains):
-                findings.append("DMARC rua= only points to vendor-managed addresses — you may not be receiving your own DMARC reports directly")
+    if _is_vendor_only_rua(dmarc):
+        findings.append("DMARC rua= only points to vendor-managed addresses — you may not be receiving your own DMARC reports directly")
 
     if not msft_dkim["enabled"]:
         score -= 15
@@ -849,9 +828,8 @@ async def analyze(request: Request, domain: str):
     vendor = detect_vendor(mx)
     dkim_present = any(item["found"] for item in dkim_results)
     msft_dkim = detect_msft_dkim(dkim_results)
-    dkim_signing_authority = infer_dkim_signing_authority(vendor, dkim_results, msft_dkim)
 
-    # Phase 2: all slow I/O in parallel (SPF recursion, MTA-STS fetch, 5 probe calls)
+    # Phase 2: all slow I/O in parallel (SPF recursion, MTA-STS fetch, 5 probe calls, ESP detection)
     (
         spf_lookups,
         mta_sts_policy,
@@ -865,10 +843,13 @@ async def analyze(request: Request, domain: str):
         asyncio.to_thread(check_mta_sts_policy, domain),
         asyncio.to_thread(evaluate_direct_send, domain, vendor, mx, dmarc, msft_dkim),
         asyncio.to_thread(evaluate_catch_all, domain),
-        asyncio.to_thread(detect_email_senders, domain, spf),
+        detect_email_senders(domain, spf),
         asyncio.to_thread(_probe_relay, domain),
         asyncio.to_thread(_probe_subdomains, domain),
     )
+
+    # Infer DKIM signing authority after Phase 2 so email_senders CNAME signals are available
+    dkim_signing_authority = infer_dkim_signing_authority(vendor, dkim_results, msft_dkim, email_senders)
 
     recommended_fixes = generate_recommendations(
         spf, dmarc, mta_sts_record, tls_rpt_record,
