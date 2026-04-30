@@ -908,7 +908,11 @@ async def analyze(request: Request, domain: str):
         "report_date": report_date, "open_relay": open_relay,
         "fingerprint": fingerprint, "subdomain_data": subdomain_data,
     }
-    scan_data_json = json.dumps(share_data).replace("</", r"<\/")
+    _slim = {**share_data}
+    _slim.pop("dkim_results", None)
+    _slim["subdomain_data"] = {k: v for k, v in share_data["subdomain_data"].items() if k != "results"}
+    _slim["mta_sts_policy"] = {k: v for k, v in share_data["mta_sts_policy"].items() if k != "body"}
+    scan_data_json = json.dumps(_slim).replace("</", r"<\/")
 
     await asyncio.to_thread(_increment_scan_count)
     await asyncio.to_thread(_append_recent_scan, domain)
