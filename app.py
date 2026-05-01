@@ -19,6 +19,11 @@ import threading
 import uuid
 import os
 from datetime import datetime, timezone
+import requests as _req
+import socket as _socket
+import ipaddress as _ipaddress
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 PROBE_BASE = "http://localhost:8001"
 PROBE_URL = f"{PROBE_BASE}/probe"
@@ -60,6 +65,13 @@ app = FastAPI()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 templates = Jinja2Templates(directory="templates")
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['https://ther3boot.com', 'https://www.ther3boot.com'],
+    allow_methods=['GET'],
+    allow_headers=['*'],
+)
 
 
 def extract_domain(value: str) -> str:
@@ -978,3 +990,317 @@ async def analyze(request: Request, domain: str):
             "scan_data_json": scan_data_json,
         }
     )
+
+# ── URL Scanner ──────────────────────────────────────────────────────────────
+import requests as _req
+import socket as _socket
+import ipaddress as _ipaddress
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+_SUSPICIOUS_TLDS = {
+    '.xyz', '.tk', '.gq', '.ml', '.cf', '.ga', '.pw', '.top',
+    '.click', '.loan', '.work', '.stream', '.zip', '.mov', '.rest',
+    '.icu', '.cyou', '.bond', '.cfd',
+}
+_GSAFE_ENDPOINT = "https://safebrowsing.googleapis.com/v4/threatMatches:find"
+
+
+def _is_private_host(hostname: str) -> bool:
+    hostname = hostname.split(":")[0]
+    try:
+        addr = _ipaddress.ip_address(hostname)
+        return addr.is_private or addr.is_loopback or addr.is_link_local
+    except ValueError:
+        pass
+    try:
+        ip_str = _socket.gethostbyname(hostname)
+        addr = _ipaddress.ip_address(ip_str)
+        return addr.is_private or addr.is_loopback or addr.is_link_local
+    except Exception:
+        return False
+
+
+def _follow_redirect_chain(url: str, max_hops: int = 10) -> list[dict]:
+    chain: list[dict] = []
+    current_url = url
+    seen: set[str] = set()
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; ther3boot-URLScanner/1.0)"}
+
+    for _ in range(max_hops):
+        if current_url in seen:
+            break
+        seen.add(current_url)
+        try:
+            resp = _req.get(
+                current_url, headers=headers,
+                allow_redirects=False, timeout=8, verify=False,
+            )
+            hop: dict = {"url": current_url, "status_code": resp.status_code, "error": None}
+            chain.append(hop)
+            if resp.status_code in (301, 302, 303, 307, 308):
+                location = resp.headers.get("Location") or resp.headers.get("location", "")
+                if not location:
+                    break
+                if location.startswith("/"):
+                    p = urllib.parse.urlparse(current_url)
+                    location = urllib.parse.urlunparse((p.scheme, p.netloc, location, "", "", ""))
+                elif not location.startswith(("http://", "https://")):
+                    location = urllib.parse.urljoin(current_url, location)
+                current_url = location
+            else:
+                break
+        except _req.exceptions.SSLError:
+            chain.append({"url": current_url, "status_code": None, "error": "SSL Error"})
+            break
+        except _req.exceptions.ConnectionError:
+            chain.append({"url": current_url, "status_code": None, "error": "Connection failed"})
+            break
+        except _req.exceptions.Timeout:
+            chain.append({"url": current_url, "status_code": None, "error": "Timeout"})
+            break
+        except Exception as exc:
+            chain.append({"url": current_url, "status_code": None, "error": str(exc)[:100]})
+            break
+
+    return chain
+
+
+def _check_ssl(hostname: str, port: int = 443) -> dict:
+    try:
+        ctx = ssl.create_default_context()
+        with _socket.create_connection((hostname, port), timeout=8) as raw:
+            with ctx.wrap_socket(raw, server_hostname=hostname) as tls:
+                cert = tls.getpeercert()
+
+        not_after = datetime.strptime(cert["notAfter"], "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
+        days_remaining = (not_after - datetime.now(timezone.utc)).days
+
+        issuer_dict = {k: v for t in cert.get("issuer", []) for k, v in t}
+        subject_dict = {k: v for t in cert.get("subject", []) for k, v in t}
+
+        return {
+            "valid": True,
+            "issuer": (issuer_dict.get("organizationName") or issuer_dict.get("commonName", "Unknown"))[:80],
+            "common_name": subject_dict.get("commonName", hostname),
+            "not_after": not_after.strftime("%Y-%m-%d"),
+            "days_remaining": days_remaining,
+            "expired": days_remaining < 0,
+            "error": None,
+        }
+    except ssl.SSLCertVerificationError as exc:
+        return {"valid": False, "error": f"Verification failed: {str(exc)[:120]}", "days_remaining": None, "expired": None}
+    except Exception as exc:
+        return {"valid": False, "error": str(exc)[:120], "days_remaining": None, "expired": None}
+
+
+def _check_whois(domain: str) -> dict:
+    try:
+        import whois as _whois_lib
+        w = _whois_lib.whois(domain)
+        creation = w.creation_date
+        expiration = w.expiration_date
+        if isinstance(creation, list):
+            creation = creation[0]
+        if isinstance(expiration, list):
+            expiration = expiration[0]
+
+        if creation:
+            if hasattr(creation, "tzinfo") and creation.tzinfo is None:
+                creation = creation.replace(tzinfo=timezone.utc)
+            age_days = (datetime.now(timezone.utc) - creation).days
+        else:
+            age_days = None
+
+        return {
+            "registrar": (w.registrar or "Unknown")[:80],
+            "created": creation.strftime("%Y-%m-%d") if creation else None,
+            "expires": expiration.strftime("%Y-%m-%d") if expiration else None,
+            "age_days": age_days,
+            "error": None,
+        }
+    except Exception as exc:
+        return {"registrar": None, "created": None, "expires": None, "age_days": None, "error": str(exc)[:120]}
+
+
+def _check_safe_browsing(url: str) -> dict:
+    api_key = os.environ.get("GOOGLE_SAFE_BROWSING_KEY", "")
+    if not api_key:
+        return {"status": "not_configured", "threats": []}
+    payload = {
+        "client": {"clientId": "ther3boot-urlscanner", "clientVersion": "1.0"},
+        "threatInfo": {
+            "threatTypes": ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION"],
+            "platformTypes": ["ANY_PLATFORM"],
+            "threatEntryTypes": ["URL"],
+            "threatEntries": [{"url": url}],
+        },
+    }
+    try:
+        data = json.dumps(payload).encode()
+        req = urllib.request.Request(
+            f"{_GSAFE_ENDPOINT}?key={api_key}",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            result = json.loads(resp.read().decode())
+        matches = result.get("matches", [])
+        threats = list({m.get("threatType", "") for m in matches})
+        return {"status": "threat" if threats else "clean", "threats": threats}
+    except Exception as exc:
+        return {"status": "error", "threats": [], "error": str(exc)[:100]}
+
+
+def _compute_risk_score(
+    url: str,
+    chain: list[dict],
+    final_domain: str,
+    whois_data: dict,
+    ssl_info: dict,
+    gsb: dict,
+) -> tuple[int, str, list[str]]:
+    risk = 0
+    factors: list[str] = []
+    parsed = urllib.parse.urlparse(url)
+    original_netloc = parsed.netloc.lower()
+    original_domain = re.sub(r"^www\.", "", original_netloc)
+
+    # IP-based URL
+    try:
+        _ipaddress.ip_address(original_netloc.split(":")[0])
+        risk += 20
+        factors.append("URL uses a raw IP address instead of a domain name")
+    except ValueError:
+        pass
+
+    # Suspicious TLD
+    if "." in original_domain:
+        tld = "." + original_domain.rsplit(".", 1)[-1]
+        if tld.lower() in _SUSPICIOUS_TLDS:
+            risk += 15
+            factors.append(f"Suspicious top-level domain: {tld}")
+
+    # Long URL
+    if len(url) > 200:
+        risk += 5
+        factors.append(f"Unusually long URL ({len(url)} characters)")
+
+    # Redirect depth
+    redirect_hops = [h for h in chain if h.get("status_code") in (301, 302, 303, 307, 308)]
+    if len(redirect_hops) >= 5:
+        risk += 15
+        factors.append(f"Excessive redirect chain ({len(redirect_hops)} redirects)")
+    elif len(redirect_hops) >= 3:
+        risk += 8
+        factors.append(f"Multiple redirects ({len(redirect_hops)} hops)")
+
+    # Domain change across redirects
+    if final_domain:
+        final_clean = re.sub(r"^www\.", "", final_domain.lower())
+        if final_clean and original_domain and final_clean != original_domain:
+            risk += 10
+            factors.append(f"Redirects to a different domain: {final_domain}")
+
+    # HTTP vs HTTPS
+    if parsed.scheme == "http":
+        risk += 10
+        factors.append("URL uses unencrypted HTTP")
+
+    # WHOIS domain age
+    age_days = whois_data.get("age_days")
+    if whois_data.get("error") and age_days is None:
+        risk += 8
+        factors.append("Domain registration data unavailable")
+    elif age_days is None:
+        risk += 10
+        factors.append("Domain registration date unknown")
+    elif age_days < 30:
+        risk += 40
+        factors.append(f"Domain registered very recently ({age_days} days ago)")
+    elif age_days < 180:
+        risk += 20
+        factors.append(f"Domain is only {age_days} days old")
+    elif age_days < 365:
+        risk += 10
+        factors.append(f"Domain is less than one year old ({age_days} days)")
+
+    # SSL certificate
+    if not ssl_info.get("valid"):
+        risk += 20
+        err = ssl_info.get("error", "unknown error")
+        factors.append(f"SSL issue: {err[:80]}")
+    elif ssl_info.get("expired"):
+        risk += 20
+        factors.append("SSL certificate has expired")
+    else:
+        days = ssl_info.get("days_remaining", 999)
+        if isinstance(days, int) and days < 14:
+            risk += 10
+            factors.append(f"SSL certificate expires in {days} days")
+
+    # Google Safe Browsing
+    if gsb.get("status") == "threat":
+        risk += 50
+        threats = ", ".join(gsb.get("threats", []))
+        factors.append(f"Google Safe Browsing alert: {threats}")
+
+    risk = min(risk, 100)
+
+    if risk >= 75:
+        verdict = "High risk — multiple indicators of a malicious or deceptive site."
+    elif risk >= 50:
+        verdict = "Elevated risk — characteristics commonly associated with suspicious sites."
+    elif risk >= 25:
+        verdict = "Moderate risk — a few concerns detected. Proceed with caution."
+    elif risk >= 10:
+        verdict = "Low risk — minor issues noted. Likely safe but worth verifying."
+    else:
+        verdict = "Clean — no significant risk indicators found."
+
+    return risk, verdict, factors
+
+
+@app.get("/scan-url")
+@limiter.limit("10/minute")
+async def scan_url_route(request: Request, url: str):
+    url = url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="URL is required")
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+
+    parsed = urllib.parse.urlparse(url)
+    if not parsed.netloc:
+        raise HTTPException(status_code=400, detail="Invalid URL")
+
+    hostname = parsed.netloc.split(":")[0]
+    if _is_private_host(hostname):
+        raise HTTPException(status_code=400, detail="Scanning private or internal addresses is not allowed")
+
+    chain, ssl_info, whois_info, gsb = await asyncio.gather(
+        asyncio.to_thread(_follow_redirect_chain, url),
+        asyncio.to_thread(_check_ssl, hostname),
+        asyncio.to_thread(_check_whois, hostname),
+        asyncio.to_thread(_check_safe_browsing, url),
+    )
+
+    final_url = chain[-1]["url"] if chain else url
+    final_parsed = urllib.parse.urlparse(final_url)
+    final_domain = final_parsed.netloc.lower() if final_parsed.netloc else hostname
+
+    risk, verdict, factors = _compute_risk_score(url, chain, final_domain, whois_info, ssl_info, gsb)
+
+    return {
+        "url": url,
+        "chain": chain,
+        "final_url": final_url,
+        "final_domain": final_domain,
+        "whois": whois_info,
+        "ssl": ssl_info,
+        "gsb": gsb,
+        "risk_score": risk,
+        "verdict": verdict,
+        "risk_factors": factors,
+    }
