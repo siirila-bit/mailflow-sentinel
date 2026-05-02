@@ -1447,6 +1447,9 @@
                     <div id="dmarc-fix-wrapper" style="display:none;">
                         <a id="dmarc-fix-btn" href="#" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;background:rgba(39,194,129,0.1);border:1px solid rgba(39,194,129,0.25);color:#27c281;font-weight:600;font-size:13px;text-decoration:none;transition:background 0.15s;" onmouseover="this.style.background='rgba(39,194,129,0.18)'" onmouseout="this.style.background='rgba(39,194,129,0.1)'">Analyze &amp; Fix DMARC &#8594;</a>
                     </div>
+                    <div id="dkim-fix-wrapper" style="display:none;">
+                        <a id="dkim-fix-btn" href="https://ther3boot.com/dkim-analyzer.html" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.25);color:#7c5cff;font-weight:600;font-size:13px;text-decoration:none;transition:background 0.15s;" onmouseover="this.style.background='rgba(124,92,255,0.18)'" onmouseout="this.style.background='rgba(124,92,255,0.1)'">Analyze &amp; Fix DKIM &#8594;</a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1618,6 +1621,11 @@ Analyzed by mailflowsentinel.com
                         dmarcWrap.style.display = '';
                     }
                 }
+                var hasDkimIssue = (Array.isArray(d.findings) && d.findings.some(function(f) { return f.toUpperCase().indexOf('DKIM') !== -1; })) || !d.dkim_present;
+                if (hasDkimIssue) {
+                    var dkimWrap = document.getElementById('dkim-fix-wrapper');
+                    if (dkimWrap) { dkimWrap.style.display = ''; }
+                }
             } catch(e) {}
         })();
 
@@ -1683,5 +1691,6 @@ Analyzed by mailflowsentinel.com
     </div>
     {% endif %}
 
+<script>(function(){var i=document.querySelector("input[name='domain']");if(i)i.addEventListener("input",function(){var p=this.selectionStart;this.value=this.value.toLowerCase();this.setSelectionRange(p,p);});})();</script>
 </body>
 </html>
