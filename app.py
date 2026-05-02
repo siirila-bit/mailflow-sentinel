@@ -19,11 +19,12 @@ import threading
 import uuid
 import os
 from datetime import datetime, timezone
-import requests as _req
 import socket as _socket
 import ipaddress as _ipaddress
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+import requests as _req
+import urllib3 as _urllib3
+_urllib3.disable_warnings(_urllib3.exceptions.InsecureRequestWarning)
+from fastapi.middleware.cors import CORSMiddleware
 
 PROBE_BASE = "http://localhost:8001"
 PROBE_URL = f"{PROBE_BASE}/probe"
@@ -65,12 +66,11 @@ app = FastAPI()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 templates = Jinja2Templates(directory="templates")
-from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['https://ther3boot.com', 'https://www.ther3boot.com'],
-    allow_methods=['GET'],
-    allow_headers=['*'],
+    allow_origins=["https://ther3boot.com", "https://www.ther3boot.com"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
 )
 
 
@@ -991,78 +991,68 @@ async def analyze(request: Request, domain: str):
         }
     )
 
-# ── URL Scanner ──────────────────────────────────────────────────────────────
-import requests as _req
-import socket as _socket
-import ipaddress as _ipaddress
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# ── URL Scanner ───────────────────────────────────────────────────────────────
 
 _SUSPICIOUS_TLDS = {
     '.xyz', '.tk', '.gq', '.ml', '.cf', '.ga', '.pw', '.top',
-    '.click', '.loan', '.work', '.stream', '.zip', '.mov', '.rest',
-    '.icu', '.cyou', '.bond', '.cfd',
+    '.click', '.loan', '.work', '.stream', '.zip', '.mov',
+    '.icu', '.cyou', '.bond', '.cfd', '.rest',
 }
-_GSAFE_ENDPOINT = "https://safebrowsing.googleapis.com/v4/threatMatches:find"
+_GSAFE_URL = 'https://safebrowsing.googleapis.com/v4/threatMatches:find'
 
 
 def _is_private_host(hostname: str) -> bool:
-    hostname = hostname.split(":")[0]
+    hostname = hostname.split(':')[0]
     try:
-        addr = _ipaddress.ip_address(hostname)
-        return addr.is_private or addr.is_loopback or addr.is_link_local
+        return _ipaddress.ip_address(hostname).is_private
     except ValueError:
         pass
     try:
-        ip_str = _socket.gethostbyname(hostname)
-        addr = _ipaddress.ip_address(ip_str)
-        return addr.is_private or addr.is_loopback or addr.is_link_local
+        ip = _socket.gethostbyname(hostname)
+        a = _ipaddress.ip_address(ip)
+        return a.is_private or a.is_loopback or a.is_link_local
     except Exception:
         return False
 
 
-def _follow_redirect_chain(url: str, max_hops: int = 10) -> list[dict]:
+def _follow_redirects(url: str, max_hops: int = 10) -> list[dict]:
     chain: list[dict] = []
-    current_url = url
+    current = url
     seen: set[str] = set()
-    headers = {"User-Agent": "Mozilla/5.0 (compatible; ther3boot-URLScanner/1.0)"}
-
+    headers = {'User-Agent': 'Mozilla/5.0 (compatible; ther3boot-URLScanner/1.0)'}
     for _ in range(max_hops):
-        if current_url in seen:
+        if current in seen:
             break
-        seen.add(current_url)
+        seen.add(current)
         try:
-            resp = _req.get(
-                current_url, headers=headers,
-                allow_redirects=False, timeout=8, verify=False,
-            )
-            hop: dict = {"url": current_url, "status_code": resp.status_code, "error": None}
+            r = _req.get(current, headers=headers, allow_redirects=False, timeout=8, verify=False)
+            hop: dict = {'url': current, 'status_code': r.status_code, 'error': None}
             chain.append(hop)
-            if resp.status_code in (301, 302, 303, 307, 308):
-                location = resp.headers.get("Location") or resp.headers.get("location", "")
-                if not location:
+            if r.status_code in (301, 302, 303, 307, 308):
+                loc = r.headers.get('Location') or r.headers.get('location', '')
+                if not loc:
                     break
-                if location.startswith("/"):
-                    p = urllib.parse.urlparse(current_url)
-                    location = urllib.parse.urlunparse((p.scheme, p.netloc, location, "", "", ""))
-                elif not location.startswith(("http://", "https://")):
-                    location = urllib.parse.urljoin(current_url, location)
-                current_url = location
+                if loc.startswith('/'):
+                    p = urllib.parse.urlparse(current)
+                    loc = urllib.parse.urlunparse((p.scheme, p.netloc, loc, '', '', ''))
+                elif not loc.startswith(('http://', 'https://')):
+                    loc = urllib.parse.urljoin(current, loc)
+                current = loc
             else:
                 break
         except _req.exceptions.SSLError:
-            chain.append({"url": current_url, "status_code": None, "error": "SSL Error"})
+            chain.append({'url': current, 'status_code': None, 'error': 'SSL Error'})
             break
         except _req.exceptions.ConnectionError:
-            chain.append({"url": current_url, "status_code": None, "error": "Connection failed"})
+            chain.append({'url': current, 'status_code': None, 'error': 'Connection failed'})
             break
         except _req.exceptions.Timeout:
-            chain.append({"url": current_url, "status_code": None, "error": "Timeout"})
+            chain.append({'url': current, 'status_code': None, 'error': 'Timeout'})
             break
         except Exception as exc:
-            chain.append({"url": current_url, "status_code": None, "error": str(exc)[:100]})
+            chain.append({'url': current, 'status_code': None, 'error': str(exc)[:100]})
             break
-
     return chain
 
 
@@ -1072,235 +1062,179 @@ def _check_ssl(hostname: str, port: int = 443) -> dict:
         with _socket.create_connection((hostname, port), timeout=8) as raw:
             with ctx.wrap_socket(raw, server_hostname=hostname) as tls:
                 cert = tls.getpeercert()
-
-        not_after = datetime.strptime(cert["notAfter"], "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
-        days_remaining = (not_after - datetime.now(timezone.utc)).days
-
-        issuer_dict = {k: v for t in cert.get("issuer", []) for k, v in t}
-        subject_dict = {k: v for t in cert.get("subject", []) for k, v in t}
-
+        not_after = datetime.strptime(cert['notAfter'], '%b %d %H:%M:%S %Y %Z').replace(tzinfo=timezone.utc)
+        days_left = (not_after - datetime.now(timezone.utc)).days
+        issuer = {k: v for t in cert.get('issuer', []) for k, v in t}
+        subject = {k: v for t in cert.get('subject', []) for k, v in t}
         return {
-            "valid": True,
-            "issuer": (issuer_dict.get("organizationName") or issuer_dict.get("commonName", "Unknown"))[:80],
-            "common_name": subject_dict.get("commonName", hostname),
-            "not_after": not_after.strftime("%Y-%m-%d"),
-            "days_remaining": days_remaining,
-            "expired": days_remaining < 0,
-            "error": None,
+            'valid': True,
+            'issuer': (issuer.get('organizationName') or issuer.get('commonName', 'Unknown'))[:80],
+            'common_name': subject.get('commonName', hostname),
+            'not_after': not_after.strftime('%Y-%m-%d'),
+            'days_remaining': days_left,
+            'expired': days_left < 0,
+            'error': None,
         }
     except ssl.SSLCertVerificationError as exc:
-        return {"valid": False, "error": f"Verification failed: {str(exc)[:120]}", "days_remaining": None, "expired": None}
+        return {'valid': False, 'error': str(exc)[:120], 'days_remaining': None, 'expired': None}
     except Exception as exc:
-        return {"valid": False, "error": str(exc)[:120], "days_remaining": None, "expired": None}
+        return {'valid': False, 'error': str(exc)[:120], 'days_remaining': None, 'expired': None}
 
 
 def _check_whois(domain: str) -> dict:
     try:
-        import whois as _whois_lib
-        w = _whois_lib.whois(domain)
-        creation = w.creation_date
-        expiration = w.expiration_date
-        if isinstance(creation, list):
-            creation = creation[0]
-        if isinstance(expiration, list):
-            expiration = expiration[0]
-
-        if creation:
-            if hasattr(creation, "tzinfo") and creation.tzinfo is None:
-                creation = creation.replace(tzinfo=timezone.utc)
-            age_days = (datetime.now(timezone.utc) - creation).days
+        import whois as _whois
+        w = _whois.whois(domain)
+        created = w.creation_date
+        expires = w.expiration_date
+        if isinstance(created, list): created = created[0]
+        if isinstance(expires, list): expires = expires[0]
+        if created:
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            age_days = (datetime.now(timezone.utc) - created).days
         else:
             age_days = None
-
         return {
-            "registrar": (w.registrar or "Unknown")[:80],
-            "created": creation.strftime("%Y-%m-%d") if creation else None,
-            "expires": expiration.strftime("%Y-%m-%d") if expiration else None,
-            "age_days": age_days,
-            "error": None,
+            'registrar': (w.registrar or 'Unknown')[:80],
+            'created': created.strftime('%Y-%m-%d') if created else None,
+            'expires': expires.strftime('%Y-%m-%d') if expires else None,
+            'age_days': age_days,
+            'error': None,
         }
     except Exception as exc:
-        return {"registrar": None, "created": None, "expires": None, "age_days": None, "error": str(exc)[:120]}
+        return {'registrar': None, 'created': None, 'expires': None, 'age_days': None, 'error': str(exc)[:120]}
 
 
 def _check_safe_browsing(url: str) -> dict:
-    api_key = os.environ.get("GOOGLE_SAFE_BROWSING_KEY", "")
-    if not api_key:
-        return {"status": "not_configured", "threats": []}
-    payload = {
-        "client": {"clientId": "ther3boot-urlscanner", "clientVersion": "1.0"},
-        "threatInfo": {
-            "threatTypes": ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION"],
-            "platformTypes": ["ANY_PLATFORM"],
-            "threatEntryTypes": ["URL"],
-            "threatEntries": [{"url": url}],
+    key = os.environ.get('GOOGLE_SAFE_BROWSING_KEY', '')
+    if not key:
+        return {'status': 'not_configured', 'threats': []}
+    payload = json.dumps({
+        'client': {'clientId': 'ther3boot-urlscanner', 'clientVersion': '1.0'},
+        'threatInfo': {
+            'threatTypes': ['MALWARE', 'SOCIAL_ENGINEERING', 'UNWANTED_SOFTWARE', 'POTENTIALLY_HARMFUL_APPLICATION'],
+            'platformTypes': ['ANY_PLATFORM'],
+            'threatEntryTypes': ['URL'],
+            'threatEntries': [{'url': url}],
         },
-    }
+    }).encode()
     try:
-        data = json.dumps(payload).encode()
         req = urllib.request.Request(
-            f"{_GSAFE_ENDPOINT}?key={api_key}",
-            data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST",
+            f'{_GSAFE_URL}?key={key}', data=payload,
+            headers={'Content-Type': 'application/json'}, method='POST',
         )
         with urllib.request.urlopen(req, timeout=8) as resp:
-            result = json.loads(resp.read().decode())
-        matches = result.get("matches", [])
-        threats = list({m.get("threatType", "") for m in matches})
-        return {"status": "threat" if threats else "clean", "threats": threats}
+            data = json.loads(resp.read().decode())
+        threats = list({m.get('threatType', '') for m in data.get('matches', [])})
+        return {'status': 'threat' if threats else 'clean', 'threats': threats}
     except Exception as exc:
-        return {"status": "error", "threats": [], "error": str(exc)[:100]}
+        return {'status': 'error', 'threats': [], 'error': str(exc)[:100]}
 
 
-def _compute_risk_score(
-    url: str,
-    chain: list[dict],
-    final_domain: str,
-    whois_data: dict,
-    ssl_info: dict,
-    gsb: dict,
+def _risk_score(
+    url: str, chain: list[dict], final_domain: str,
+    whois_data: dict, ssl_info: dict, gsb: dict,
 ) -> tuple[int, str, list[str]]:
     risk = 0
     factors: list[str] = []
     parsed = urllib.parse.urlparse(url)
-    original_netloc = parsed.netloc.lower()
-    original_domain = re.sub(r"^www\.", "", original_netloc)
+    orig = re.sub(r'^www\.', '', parsed.netloc.lower())
 
-    # IP-based URL
     try:
-        _ipaddress.ip_address(original_netloc.split(":")[0])
-        risk += 20
-        factors.append("URL uses a raw IP address instead of a domain name")
+        _ipaddress.ip_address(parsed.netloc.split(':')[0])
+        risk += 20; factors.append('URL uses a raw IP address')
     except ValueError:
         pass
 
-    # Suspicious TLD
-    if "." in original_domain:
-        tld = "." + original_domain.rsplit(".", 1)[-1]
+    if '.' in orig:
+        tld = '.' + orig.rsplit('.', 1)[-1]
         if tld.lower() in _SUSPICIOUS_TLDS:
-            risk += 15
-            factors.append(f"Suspicious top-level domain: {tld}")
+            risk += 15; factors.append(f'Suspicious TLD: {tld}')
 
-    # Long URL
     if len(url) > 200:
-        risk += 5
-        factors.append(f"Unusually long URL ({len(url)} characters)")
+        risk += 5; factors.append(f'Unusually long URL ({len(url)} chars)')
 
-    # Redirect depth
-    redirect_hops = [h for h in chain if h.get("status_code") in (301, 302, 303, 307, 308)]
-    if len(redirect_hops) >= 5:
-        risk += 15
-        factors.append(f"Excessive redirect chain ({len(redirect_hops)} redirects)")
-    elif len(redirect_hops) >= 3:
-        risk += 8
-        factors.append(f"Multiple redirects ({len(redirect_hops)} hops)")
+    hops = [h for h in chain if h.get('status_code') in (301, 302, 303, 307, 308)]
+    if len(hops) >= 5:
+        risk += 15; factors.append(f'Excessive redirect chain ({len(hops)} hops)')
+    elif len(hops) >= 3:
+        risk += 8; factors.append(f'Multiple redirects ({len(hops)} hops)')
 
-    # Domain change across redirects
     if final_domain:
-        final_clean = re.sub(r"^www\.", "", final_domain.lower())
-        if final_clean and original_domain and final_clean != original_domain:
-            risk += 10
-            factors.append(f"Redirects to a different domain: {final_domain}")
+        fd = re.sub(r'^www\.', '', final_domain.lower())
+        if fd and orig and fd != orig:
+            risk += 10; factors.append(f'Redirects to different domain: {final_domain}')
 
-    # HTTP vs HTTPS
-    if parsed.scheme == "http":
-        risk += 10
-        factors.append("URL uses unencrypted HTTP")
+    if parsed.scheme == 'http':
+        risk += 10; factors.append('Unencrypted HTTP')
 
-    # WHOIS domain age
-    age_days = whois_data.get("age_days")
-    if whois_data.get("error") and age_days is None:
-        risk += 8
-        factors.append("Domain registration data unavailable")
-    elif age_days is None:
-        risk += 10
-        factors.append("Domain registration date unknown")
-    elif age_days < 30:
-        risk += 40
-        factors.append(f"Domain registered very recently ({age_days} days ago)")
-    elif age_days < 180:
-        risk += 20
-        factors.append(f"Domain is only {age_days} days old")
-    elif age_days < 365:
-        risk += 10
-        factors.append(f"Domain is less than one year old ({age_days} days)")
+    age = whois_data.get('age_days')
+    if whois_data.get('error') and age is None:
+        risk += 8; factors.append('Domain registration data unavailable')
+    elif age is None:
+        risk += 10; factors.append('Domain registration date unknown')
+    elif age < 30:
+        risk += 40; factors.append(f'Domain registered {age} days ago')
+    elif age < 180:
+        risk += 20; factors.append(f'Domain is only {age} days old')
+    elif age < 365:
+        risk += 10; factors.append(f'Domain less than one year old ({age} days)')
 
-    # SSL certificate
-    if not ssl_info.get("valid"):
-        risk += 20
-        err = ssl_info.get("error", "unknown error")
-        factors.append(f"SSL issue: {err[:80]}")
-    elif ssl_info.get("expired"):
-        risk += 20
-        factors.append("SSL certificate has expired")
-    else:
-        days = ssl_info.get("days_remaining", 999)
-        if isinstance(days, int) and days < 14:
-            risk += 10
-            factors.append(f"SSL certificate expires in {days} days")
+    if not ssl_info.get('valid'):
+        risk += 20; factors.append(f"SSL issue: {ssl_info.get('error', 'unknown')[:80]}")
+    elif ssl_info.get('expired'):
+        risk += 20; factors.append('SSL certificate expired')
+    elif isinstance(ssl_info.get('days_remaining'), int) and ssl_info['days_remaining'] < 14:
+        risk += 10; factors.append(f"SSL expires in {ssl_info['days_remaining']} days")
 
-    # Google Safe Browsing
-    if gsb.get("status") == "threat":
-        risk += 50
-        threats = ", ".join(gsb.get("threats", []))
-        factors.append(f"Google Safe Browsing alert: {threats}")
+    if gsb.get('status') == 'threat':
+        risk += 50; factors.append(f"Google Safe Browsing: {', '.join(gsb.get('threats', []))}")
 
     risk = min(risk, 100)
-
-    if risk >= 75:
-        verdict = "High risk — multiple indicators of a malicious or deceptive site."
-    elif risk >= 50:
-        verdict = "Elevated risk — characteristics commonly associated with suspicious sites."
-    elif risk >= 25:
-        verdict = "Moderate risk — a few concerns detected. Proceed with caution."
-    elif risk >= 10:
-        verdict = "Low risk — minor issues noted. Likely safe but worth verifying."
-    else:
-        verdict = "Clean — no significant risk indicators found."
-
+    if risk >= 75:   verdict = 'High risk — multiple indicators of a malicious or deceptive site.'
+    elif risk >= 50: verdict = 'Elevated risk — characteristics associated with suspicious sites.'
+    elif risk >= 25: verdict = 'Moderate risk — a few concerns detected. Proceed with caution.'
+    elif risk >= 10: verdict = 'Low risk — minor issues noted. Likely safe but worth verifying.'
+    else:            verdict = 'Clean — no significant risk indicators found.'
     return risk, verdict, factors
 
 
-@app.get("/scan-url")
-@limiter.limit("10/minute")
+@app.get('/scan-url')
+@limiter.limit('10/minute')
 async def scan_url_route(request: Request, url: str):
     url = url.strip()
     if not url:
-        raise HTTPException(status_code=400, detail="URL is required")
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-
+        raise HTTPException(status_code=400, detail='URL is required')
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
     parsed = urllib.parse.urlparse(url)
     if not parsed.netloc:
-        raise HTTPException(status_code=400, detail="Invalid URL")
-
-    hostname = parsed.netloc.split(":")[0]
+        raise HTTPException(status_code=400, detail='Invalid URL')
+    hostname = parsed.netloc.split(':')[0]
     if _is_private_host(hostname):
-        raise HTTPException(status_code=400, detail="Scanning private or internal addresses is not allowed")
+        raise HTTPException(status_code=400, detail='Scanning private addresses is not allowed')
 
     chain, ssl_info, whois_info, gsb = await asyncio.gather(
-        asyncio.to_thread(_follow_redirect_chain, url),
+        asyncio.to_thread(_follow_redirects, url),
         asyncio.to_thread(_check_ssl, hostname),
         asyncio.to_thread(_check_whois, hostname),
         asyncio.to_thread(_check_safe_browsing, url),
     )
 
-    final_url = chain[-1]["url"] if chain else url
-    final_parsed = urllib.parse.urlparse(final_url)
-    final_domain = final_parsed.netloc.lower() if final_parsed.netloc else hostname
-
-    risk, verdict, factors = _compute_risk_score(url, chain, final_domain, whois_info, ssl_info, gsb)
+    final_url = chain[-1]['url'] if chain else url
+    final_domain = urllib.parse.urlparse(final_url).netloc.lower() or hostname
+    risk, verdict, factors = _risk_score(url, chain, final_domain, whois_info, ssl_info, gsb)
 
     return {
-        "url": url,
-        "chain": chain,
-        "final_url": final_url,
-        "final_domain": final_domain,
-        "whois": whois_info,
-        "ssl": ssl_info,
-        "gsb": gsb,
-        "risk_score": risk,
-        "verdict": verdict,
-        "risk_factors": factors,
+        'url': url,
+        'chain': chain,
+        'final_url': final_url,
+        'final_domain': final_domain,
+        'whois': whois_info,
+        'ssl': ssl_info,
+        'gsb': gsb,
+        'risk_score': risk,
+        'verdict': verdict,
+        'risk_factors': factors,
     }
