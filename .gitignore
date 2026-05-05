@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+*.bak
+*.bak2
+reports/
+scan_count.txt
+.claude/
