@@ -796,16 +796,6 @@ async def stats_route(request: Request):
     return {"scans": count}
 
 
-@app.get("/recent")
-@limiter.limit("60/minute")
-async def recent_route(request: Request):
-    try:
-        with open(RECENT_SCANS_FILE) as f:
-            scans = json.load(f)
-    except (FileNotFoundError, ValueError, json.JSONDecodeError):
-        scans = []
-    return scans
-
 
 @app.get("/robots.txt")
 def robots():
@@ -825,7 +815,10 @@ def about(request: Request):
 @app.post("/share")
 @limiter.limit("10/minute")
 async def share(request: Request):
-    data = await request.json()
+    body = await request.body()
+    if len(body) > 512 * 1024:
+        raise HTTPException(status_code=413, detail={"error": "Payload too large", "max_bytes": 524288})
+    data = json.loads(body)
     report_id = str(uuid.uuid4())
     path = os.path.join(REPORTS_DIR, f"{report_id}.json")
     with open(path, "w") as f:
