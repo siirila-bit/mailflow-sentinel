@@ -799,7 +799,7 @@
     <div class="shared-banner">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--accent)"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
         <span><strong>Shared report</strong> &middot; Scanned on {{ report_date }}</span>
-        <a href="/?domain={{ domain }}">Run fresh scan &rarr;</a>
+        <a href="/analyze?domain={{ domain }}">Run fresh scan &rarr;</a>
     </div>
 
         <div class="result-card">
@@ -997,12 +997,10 @@
                     <ul class="clean">
                         {% for f in findings %}
                         <li>
-                            {% if "missing" in f.lower() %}
+                            {% if "missing" in f.lower() or "+all" in f or "?all" in f or "open relay" in f.lower() %}
                                 <span class="finding-bad">{{ f }}</span>
-                            {% elif "none" in f.lower() or "validation" in f.lower() or "high" in f.lower() %}
-                                <span class="finding-warn">{{ f }}</span>
                             {% else %}
-                                <span class="finding-good">{{ f }}</span>
+                                <span class="finding-warn">{{ f }}</span>
                             {% endif %}
                         </li>
                         {% endfor %}
@@ -1040,6 +1038,7 @@
                     <div>
                         <strong>Active DKIM Keys</strong>
                         <div style="margin-top: 12px;">
+                            {% if dkim_results %}
                             {% for d in dkim_results %}
                                 {% if d.found %}
                                 <div style="margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
@@ -1048,15 +1047,18 @@
                                 </div>
                                 {% endif %}
                             {% endfor %}
+                            {% endif %}
                         </div>
                     </div>
 
                     <details style="margin-top: 16px;">
                         <summary style="cursor: pointer; color: var(--muted);">Other selectors checked</summary>
                         <div style="margin-top: 10px;">
+                            {% if dkim_results %}
                             {% for d in dkim_results %}
                                 {% if not d.found %}<div>{{ d.selector }} — Not Found</div>{% endif %}
                             {% endfor %}
+                            {% endif %}
                         </div>
                     </details>
                 </div>
@@ -1319,7 +1321,13 @@
                 {% if recommended_fixes %}
                 <ul class="clean">
                     {% for fix in recommended_fixes %}
-                    <li><span class="finding-warn">{{ fix }}</span></li>
+                    <li>
+                        {% if fix.startswith('CRITICAL:') %}
+                            <span class="finding-bad">{{ fix }}</span>
+                        {% else %}
+                            <span class="finding-warn">{{ fix }}</span>
+                        {% endif %}
+                    </li>
                     {% endfor %}
                 </ul>
                 {% else %}
@@ -1333,7 +1341,7 @@
                 <strong>Run a fresh scan</strong>
                 <p>Re-run this domain live or check a different one.</p>
             </div>
-            <a href="/?domain={{ domain }}" class="btn-scan">Analyze {{ domain }} →</a>
+            <a href="/analyze?domain={{ domain }}" class="btn-scan">Analyze {{ domain }} →</a>
         </div>
 
         <!-- Hidden report data for copy -->

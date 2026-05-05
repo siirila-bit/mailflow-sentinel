@@ -1,7 +1,6 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
     <title>MailFlow Sentinel</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230b1020'/><path d='M4 10l12 9 12-9' stroke='%235aa9ff' stroke-width='2' fill='none' stroke-linecap='round'/><rect x='4' y='10' width='24' height='16' rx='2' stroke='%235aa9ff' stroke-width='2' fill='none'/></svg>">
@@ -31,15 +30,12 @@
                 linear-gradient(180deg, #09101c 0%, #0b1020 100%);
             color: var(--text);
             min-height: 100vh;
-            max-width: 100%;
         }
 
         .wrap {
             max-width: 1180px;
             margin: 0 auto;
             padding: 36px 20px 60px;
-            width: 100%;
-            overflow-x: hidden;
         }
 
         .header-row {
@@ -150,8 +146,6 @@
             font-size: 36px;
             font-weight: 800;
             letter-spacing: -0.03em;
-            overflow-wrap: break-word;
-            min-width: 0;
         }
 
         .score-wrap {
@@ -289,7 +283,6 @@
             font-size: 28px;
             font-weight: 800;
             margin-bottom: 8px;
-            overflow-wrap: break-word;
         }
 
         .mini-note { color: var(--muted); font-size: 14px; }
@@ -299,7 +292,6 @@
         .section-card {
             border-radius: 20px;
             padding: 22px;
-            overflow-x: hidden;
         }
 
         .section-title {
@@ -322,47 +314,8 @@
             padding: 16px;
             color: var(--text);
             overflow-x: auto;
-            overflow-wrap: break-word;
-        }
-
-        .record-box { position: relative; }
-
-        .record-box code {
-            display: block;
-            white-space: pre;
-            overflow-wrap: normal;
-        }
-
-        .copy-btn {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            padding: 4px 5px;
-            border-radius: 6px;
-            border: 1px solid transparent;
-            background: transparent;
-            color: transparent;
-            cursor: pointer;
-            line-height: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background 0.15s, color 0.15s, border-color 0.15s;
-        }
-        .record-box:hover .copy-btn {
-            color: var(--muted);
-            border-color: rgba(255,255,255,0.1);
-            background: rgba(255,255,255,0.05);
-        }
-        .copy-btn:hover {
-            color: var(--text) !important;
-            background: rgba(255,255,255,0.1) !important;
-            border-color: rgba(255,255,255,0.18) !important;
-        }
-        .copy-btn.copied {
-            color: var(--good) !important;
-            border-color: rgba(39,194,129,0.35) !important;
-            background: rgba(39,194,129,0.1) !important;
+            word-break: break-all;
+            word-break: break-all;
         }
 
         code {
@@ -397,9 +350,6 @@
             border-radius: 999px;
             font-weight: 700;
             font-size: 13px;
-            max-width: 100%;
-            overflow-wrap: break-word;
-            white-space: normal;
         }
 
         .finding-good {
@@ -510,7 +460,7 @@
         }
 
         @media (max-width: 768px) {
-            .wrap { padding: 20px 16px 40px; }
+            .wrap { padding: 20px 14px 40px; }
             .title { font-size: 28px; }
             .subtitle { font-size: 14px; }
             .search-card { padding: 14px; border-radius: 16px; }
@@ -534,8 +484,7 @@
             .section-title { font-size: 20px; }
             .section-sub { font-size: 14px; }
             .action-row { flex-direction: column; gap: 8px; }
-            .btn-action { width: 100%; justify-content: center; min-height: 44px; }
-            .btn-smtp-trace { padding: 8px 14px; font-size: 13px; min-height: 36px; margin-left: 0; margin-top: 8px; display: flex; }
+            .btn-action { width: 100%; justify-content: center; }
             .scan-another { flex-direction: column; align-items: flex-start; gap: 14px; }
             .btn-scan { width: 100%; text-align: center; }
             .record-box, pre { font-size: 13px; padding: 12px; }
@@ -545,8 +494,6 @@
             .overview-grid { grid-template-columns: 1fr; }
             .title { font-size: 24px; }
             .domain { font-size: 22px; }
-            .mini-value { font-size: 20px; }
-            .badge-group-label { min-width: 72px; font-size: 10px; }
         }
 
         /* ============ PRINT / PDF STYLES ============ */
@@ -703,11 +650,6 @@
             /* Print header */
             .print-header { display: block !important; }
 
-
-            /* What This Means */
-            .wtm { border-top: 1px solid #e2e8f0 !important; padding-top: 14px !important; }
-            .wtm-label { color: #64748b !important; }
-            .wtm-text { color: #334155 !important; }
             /* Title */
             .title { color: #1e293b !important; font-size: 28pt !important; }
             .title span { -webkit-text-fill-color: #1e40af !important; }
@@ -721,130 +663,6 @@
         }
 
         .print-header { display: none; }
-
-        .btn-smtp-trace {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            padding: 4px 10px;
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            border: 1px solid var(--border);
-            background: rgba(255,255,255,0.05);
-            color: var(--muted);
-            margin-left: 8px;
-            vertical-align: middle;
-            transition: background 0.2s, color 0.2s;
-        }
-        .btn-smtp-trace:hover { background: rgba(255,255,255,0.09); color: var(--text); }
-        .smtp-modal-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.65);
-            backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-        .smtp-modal-overlay.open { display: flex; }
-        .smtp-modal-box {
-            background: #111827;
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 24px;
-            width: 100%;
-            max-width: 640px;
-            max-height: 80vh;
-            overflow-y: auto;
-            box-shadow: 0 24px 60px rgba(0,0,0,0.5);
-        }
-        .smtp-modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 6px;
-            font-size: 15px;
-            font-weight: 700;
-            color: var(--text);
-        }
-        .smtp-modal-close {
-            background: none;
-            border: none;
-            color: var(--muted);
-            font-size: 22px;
-            cursor: pointer;
-            line-height: 1;
-            padding: 0 2px;
-        }
-        .smtp-modal-close:hover { color: var(--text); }
-        .smtp-modal-host { font-size: 12px; color: var(--muted); margin-bottom: 18px; font-family: monospace; }
-        .smtp-trace-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .smtp-trace-table th {
-            text-align: left;
-            color: var(--muted);
-            font-weight: 600;
-            padding: 6px 10px;
-            border-bottom: 1px solid var(--border);
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.07em;
-        }
-        .smtp-trace-table td {
-            padding: 9px 10px;
-            border-bottom: 1px solid rgba(255,255,255,0.04);
-            color: var(--text);
-            vertical-align: top;
-        }
-        .smtp-trace-table td:nth-child(2) { font-family: monospace; color: var(--muted); white-space: nowrap; }
-        .smtp-trace-table td:nth-child(3) { font-family: monospace; font-size: 12px; word-break: break-word; color: var(--muted); }
-        .smtp-trace-table tr:last-child td { border-bottom: none; }
-
-        .share-modal-overlay {
-            display: none; position: fixed; inset: 0;
-            background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px); z-index: 1000;
-            align-items: center; justify-content: center; padding: 20px;
-        }
-        .share-modal-overlay.open { display: flex; }
-        .share-modal-box {
-            background: #111827; border: 1px solid var(--border);
-            border-radius: 16px; padding: 24px; width: 100%; max-width: 520px;
-            box-shadow: 0 24px 60px rgba(0,0,0,0.5);
-        }
-        .share-url-row {
-            display: flex; gap: 8px; margin-top: 14px;
-        }
-        .share-url-input {
-            flex: 1; padding: 10px 12px; border-radius: 10px;
-            border: 1px solid var(--border); background: rgba(255,255,255,0.04);
-            color: var(--text); font-size: 13px; font-family: monospace; outline: none;
-        }
-
-        /* ── What This Means ──────────────────────────────────────────── */
-        .wtm {
-            border-top: 1px solid var(--border);
-            padding-top: 20px;
-            margin-bottom: 4px;
-        }
-        .wtm-label {
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--muted);
-            margin-bottom: 8px;
-        }
-        .wtm-text {
-            font-size: 14px;
-            line-height: 1.65;
-            color: rgba(232, 237, 247, 0.82);
-            margin: 0;
-        }
     </style>
 </head>
 <body>
@@ -853,7 +671,6 @@
             <div>
                 <h1 class="title">MailFlow <span>Sentinel</span></h1>
             </div>
-            <a href="/about" style="font-size:13px;font-weight:600;color:var(--muted);text-decoration:none;padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.03);transition:color 0.15s,border-color 0.15s;" onmouseover="this.style.color='var(--accent)';this.style.borderColor='rgba(90,169,255,0.3)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">About</a>
         </div>
         <p class="subtitle">Run a fast DNS-based email security assessment for any domain or email address.</p>
 
@@ -870,11 +687,6 @@
                     <button type="submit">Run Analysis</button>
                 </div>
             </form>
-        </div>
-
-        <div id="recent-scans" style="display:none;margin-bottom:22px;">
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(149,163,191,0.45);margin-bottom:10px;">Recent Scans</div>
-            <div id="recent-list" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
         </div>
 
         {% if domain %}
@@ -906,8 +718,6 @@
 
                             {% if dmarc and "reject" in dmarc.lower() %}
                                 <span class="badge badge-good"><span class="dot"></span>DMARC Reject</span>
-                            {% elif dmarc and "quarantine" in dmarc.lower() %}
-                                <span class="badge badge-warn"><span class="dot"></span>DMARC Quarantine</span>
                             {% elif dmarc %}
                                 <span class="badge badge-warn"><span class="dot"></span>DMARC None</span>
                             {% else %}
@@ -946,9 +756,11 @@
                         <div class="badge-group">
                             <span class="badge-group-label">Protection</span>
 
-                            {% if direct_send.status == "Protected" %}
+                            {% if direct_send.status == "Likely Protected" %}
                                 <span class="badge badge-good"><span class="dot"></span>Direct Send</span>
-                            {% elif direct_send.status == "Not Protected" %}
+                            {% elif direct_send.status == "Potential Exposure" %}
+                                <span class="badge badge-warn"><span class="dot"></span>Direct Send</span>
+                            {% elif direct_send.status == "At Risk" %}
                                 <span class="badge badge-bad"><span class="dot"></span>Direct Send</span>
                             {% else %}
                                 <span class="badge badge-warn"><span class="dot"></span>Direct Send</span>
@@ -973,39 +785,6 @@
                 </div>
             </div>
 
-            <div class="wtm">
-                <div class="wtm-label">What this means</div>
-                <p class="wtm-text">
-                    {% if not dmarc and not spf %}
-                        Anyone on the internet can send email that appears to come from {{ domain }} &mdash; with neither SPF nor DMARC configured, receiving servers have no authentication signals to act on.
-                    {% elif not dmarc %}
-                        Without a DMARC policy, receiving servers have no instruction to reject or quarantine email spoofed as {{ domain }}, leaving impersonation largely unchallenged even where SPF is configured.
-                    {% elif 'p=none' in dmarc.lower() %}
-                        DMARC is set to monitor only, so spoofed email claiming to come from {{ domain }} still reaches inboxes &mdash; the policy collects data but does nothing to block delivery.
-                    {% elif 'p=quarantine' in dmarc.lower() %}
-                        A DMARC quarantine policy is active, so most spoofed email from {{ domain }} should route to spam, though some recipients may still receive it depending on how strictly their provider applies the policy.
-                    {% else %}
-                        DMARC reject is enforced, instructing receivers to block email that fails authentication before it reaches any inbox &mdash; the strongest available protection against impersonation of {{ domain }}.
-                    {% endif %}
-                    {% if direct_send.status == 'Not Protected' %}
-                        The Microsoft 365 direct-send endpoint appears reachable without connector restrictions, which may let an attacker bypass your gateway entirely.
-                    {% elif dkim_present and spf and dmarc and 'reject' in dmarc.lower() %}
-                        SPF, DKIM, and DMARC are all deployed &mdash; the core authentication stack is complete.
-                    {% elif dkim_present and spf %}
-                        SPF and DKIM are configured, providing a partial authentication baseline.
-                    {% elif spf %}
-                        SPF is present but DKIM is missing, leaving the authentication chain incomplete.
-                    {% elif dkim_present %}
-                        DKIM is active but SPF is absent, leaving sender authorization incomplete.
-                    {% else %}
-                        Email authentication is critically incomplete &mdash; multiple core controls are absent.
-                    {% endif %}
-                    {% if recommended_fixes %}
-                        Priority action: {{ recommended_fixes[0] }}
-                    {% endif %}
-                </p>
-            </div>
-
             <div class="overview-grid">
                 <div class="mini-card">
                     <div class="mini-label">SPF</div>
@@ -1013,7 +792,7 @@
                         {% if spf %}{{ spf_lookups }}/10{% else %}Missing{% endif %}
                     </div>
                     <div class="mini-note">
-                        {% if spf %}SPF record present{% else %}No SPF record found{% endif %}
+                        {% if spf %}SPF record present with estimated lookup count{% else %}No SPF record found{% endif %}
                     </div>
                 </div>
 
@@ -1043,8 +822,9 @@
                 <div class="mini-card">
                     <div class="mini-label">Direct Send</div>
                     <div class="mini-value">
-                        {% if direct_send.status == "Protected" %}Protected
-                        {% elif direct_send.status == "Not Protected" %}Not Protected
+                        {% if direct_send.status == "Likely Protected" %}Low Risk
+                        {% elif direct_send.status == "Potential Exposure" %}Review
+                        {% elif direct_send.status == "At Risk" %}Risk
                         {% else %}Unknown{% endif %}
                     </div>
                     <div class="mini-note">{{ direct_send.reason }}</div>
@@ -1063,7 +843,7 @@
                 </button>
                 <button class="btn-action" onclick="copyReport(this)">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                    Copy as Text
+                    Copy Report
                 </button>
             </div>
         </div>
@@ -1075,7 +855,6 @@
                     <p class="section-sub">These records show where the domain receives email.</p>
                     {% if mx %}
                     <div class="record-box">
-                        <button class="copy-btn" onclick="copyRecordBox(this)" title="Copy to clipboard" aria-label="Copy to clipboard"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
                         {% for m in mx %}<div><code>{{ m }}</code></div>{% endfor %}
                     </div>
                     {% else %}
@@ -1087,8 +866,8 @@
                     <h3 class="section-title">SPF</h3>
                     <p class="section-sub">SPF defines which mail servers are allowed to send on behalf of the domain.</p>
                     {% if spf %}
-                    <div class="record-box"><button class="copy-btn" onclick="copyRecordBox(this)" title="Copy to clipboard" aria-label="Copy to clipboard"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button><code>{{ spf }}</code></div>
-                    <p class="muted" style="margin-top: 12px;">SPF lookups: <strong>{{ spf_lookups }}</strong></p>
+                    <div class="record-box"><code>{{ spf }}</code></div>
+                    <p class="muted" style="margin-top: 12px;">Estimated SPF lookups: <strong>{{ spf_lookups }}</strong></p>
                     {% else %}
                     <p class="muted">No SPF record found.</p>
                     {% endif %}
@@ -1100,7 +879,7 @@
                     <h3 class="section-title">DMARC</h3>
                     <p class="section-sub">DMARC tells receiving mail systems what to do when SPF or DKIM checks fail.</p>
                     {% if dmarc %}
-                    <div class="record-box"><button class="copy-btn" onclick="copyRecordBox(this)" title="Copy to clipboard" aria-label="Copy to clipboard"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button><code>{{ dmarc }}</code></div>
+                    <div class="record-box"><code>{{ dmarc }}</code></div>
                     {% else %}
                     <p class="muted">No DMARC record found.</p>
                     {% endif %}
@@ -1113,10 +892,12 @@
                     <ul class="clean">
                         {% for f in findings %}
                         <li>
-                            {% if "missing" in f.lower() or "+all" in f or "?all" in f or "open relay" in f.lower() %}
+                            {% if "missing" in f.lower() %}
                                 <span class="finding-bad">{{ f }}</span>
-                            {% else %}
+                            {% elif "none" in f.lower() or "validation" in f.lower() or "high" in f.lower() %}
                                 <span class="finding-warn">{{ f }}</span>
+                            {% else %}
+                                <span class="finding-good">{{ f }}</span>
                             {% endif %}
                         </li>
                         {% endfor %}
@@ -1132,7 +913,6 @@
                 <p class="section-sub">Verifies that email is authorized by the domain and was not altered in transit.</p>
 
                 <div class="record-box">
-                    <button class="copy-btn" onclick="copyRecordBox(this)" title="Copy to clipboard" aria-label="Copy to clipboard"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
                     <div style="margin-bottom: 16px;">
                         <strong>Status:</strong>
                         {% if dkim_present %}
@@ -1158,7 +938,7 @@
                             {% for d in dkim_results %}
                                 {% if d.found %}
                                 <div style="margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
-                                    <div>✔ <strong>{{ d.selector }}</strong> ({{ d.label }}) {% if d.bits %}– {{ d.bits }} bit{% if d.weak %} <span style="color:#f87171;font-weight:600;">⚠ weak</span>{% endif %}{% endif %}</div>
+                                    <div>✔ <strong>{{ d.selector }}</strong> ({{ d.label }}) {% if d.bits %}– {{ d.bits }} bit{% endif %}</div>
                                     <div class="muted" style="margin-top: 6px;">DKIM DNS host: <code>{{ d.host }}</code></div>
                                 </div>
                                 {% endif %}
@@ -1184,7 +964,7 @@
 
                     {% if mta_sts_record %}
                     <p><strong>DNS record</strong></p>
-                    <div class="record-box"><button class="copy-btn" onclick="copyRecordBox(this)" title="Copy to clipboard" aria-label="Copy to clipboard"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button><code>{{ mta_sts_record }}</code></div>
+                    <div class="record-box"><code>{{ mta_sts_record }}</code></div>
                     {% else %}
                     <p class="muted">DNS record missing.</p>
                     {% endif %}
@@ -1205,7 +985,7 @@
                     <h3 class="section-title">TLS-RPT</h3>
                     <p class="section-sub">TLS-RPT enables reporting of SMTP TLS and MTA-STS delivery failures.</p>
                     {% if tls_rpt_record %}
-                    <div class="record-box"><button class="copy-btn" onclick="copyRecordBox(this)" title="Copy to clipboard" aria-label="Copy to clipboard"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button><code>{{ tls_rpt_record }}</code></div>
+                    <div class="record-box"><code>{{ tls_rpt_record }}</code></div>
                     {% else %}
                     <p class="muted">TLS-RPT record missing.</p>
                     {% endif %}
@@ -1217,7 +997,7 @@
                 <h3 class="section-title">BIMI</h3>
                 <p class="section-sub">Brand Indicators for Message Identification allows verified brand logos to appear in supporting email clients. Requires DMARC enforcement at reject or quarantine.</p>
                 {% if bimi_record %}
-                <div class="record-box"><button class="copy-btn" onclick="copyRecordBox(this)" title="Copy to clipboard" aria-label="Copy to clipboard"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button><code>{{ bimi_record }}</code></div>
+                <div class="record-box"><code>{{ bimi_record }}</code></div>
                 <p class="muted" style="margin-top:12px;">BIMI record detected. Brand logo display is supported in Gmail, Apple Mail, and Yahoo Mail for senders with a Verified Mark Certificate (VMC).</p>
                 {% else %}
                 <p class="muted">No BIMI record found at <code>default._bimi.{{ domain }}</code>.</p>
@@ -1229,55 +1009,25 @@
                 {% endif %}
             </div>
 
-            <!-- Third-Party Email Senders -->
-            <div class="section-card">
-                <h3 class="section-title">Third-Party Email Senders</h3>
-                <p class="section-sub">Sending tools detected via DNS — SPF <code>include:</code> directives, DKIM selector CNAMEs, and tracking subdomain CNAMEs.</p>
-                {% if email_senders %}
-                <div style="display: flex; flex-direction: column; gap: 10px;">
-                    {% for esp in email_senders %}
-                    <div style="padding: 14px 16px; border-radius: 14px; background: rgba(124, 92, 255, 0.07); border: 1px solid rgba(124, 92, 255, 0.18);">
-                        <div style="margin-bottom: 10px;">
-                            <span class="badge badge-vendor" style="font-size: 13px; padding: 6px 12px;">{{ esp.name }}</span>
-                        </div>
-                        <div style="display: flex; flex-direction: column; gap: 5px;">
-                            {% for signal in esp.signals %}
-                            <div style="font-size: 12px; color: var(--muted);"><code>{{ signal }}</code></div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% else %}
-                <p class="muted">No third-party email senders detected from DNS signals.</p>
-                {% endif %}
-            </div>
-
             <div class="grid-2">
                 <div class="section-card">
                     <h3 class="section-title">Direct Send Risk</h3>
-                    <p class="section-sub">Tests whether Microsoft 365 can be reached directly by an external sender without connector enforcement.</p>
+                    <p class="section-sub">Direct send cannot be definitively validated from DNS alone. A live SMTP probe provides the authoritative answer.</p>
                     <div class="record-box">
                         <strong>Status:</strong>
-                        {% if direct_send.status == "Protected" %}
-                            <span class="badge badge-good">Protected</span>
-                        {% elif direct_send.status == "Not Protected" %}
-                            <span class="badge badge-bad">Not Protected</span>
+                        {% if direct_send.status == "Likely Protected" %}
+                            <span class="badge badge-good">Likely Protected</span>
+                        {% elif direct_send.status == "Potential Exposure" %}
+                            <span class="badge badge-warn">Potential Exposure</span>
+                        {% elif direct_send.status == "At Risk" %}
+                            <span class="badge badge-bad">At Risk</span>
                         {% else %}
                             <span class="badge badge-warn">Unknown</span>
                         {% endif %}
-                        {% if direct_send.probe_detail %}
-                            <button class="btn-smtp-trace" onclick="openSmtpModal()">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-                                SMTP Trace
-                            </button>
-                        {% endif %}
                         <br><br>
                         {{ direct_send.reason }}
-                        {% if direct_send.validation %}
                         <br><br>
-                        <em style="font-size: 13px; color: var(--muted);">{{ direct_send.validation }}</em>
-                        {% endif %}
+                        <em>{{ direct_send.validation }}</em>
                     </div>
                 </div>
 
@@ -1434,29 +1184,12 @@
                 {% if recommended_fixes %}
                 <ul class="clean">
                     {% for fix in recommended_fixes %}
-                    <li>
-                        {% if fix.startswith('CRITICAL:') %}
-                            <span class="finding-bad">{{ fix }}</span>
-                        {% else %}
-                            <span class="finding-warn">{{ fix }}</span>
-                        {% endif %}
-                    </li>
+                    <li><span class="finding-warn">{{ fix }}</span></li>
                     {% endfor %}
                 </ul>
                 {% else %}
                 <div class="finding-good">No immediate remediation recommendations.</div>
                 {% endif %}
-                <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;">
-                    <div id="spf-fix-wrapper" style="display:none;">
-                        <a id="spf-fix-btn" href="#" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;background:rgba(90,169,255,0.1);border:1px solid rgba(90,169,255,0.25);color:var(--accent);font-weight:600;font-size:13px;text-decoration:none;transition:background 0.15s;" onmouseover="this.style.background='rgba(90,169,255,0.18)'" onmouseout="this.style.background='rgba(90,169,255,0.1)'">Analyze &amp; Fix SPF &#8594;</a>
-                    </div>
-                    <div id="dmarc-fix-wrapper" style="display:none;">
-                        <a id="dmarc-fix-btn" href="#" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;background:rgba(39,194,129,0.1);border:1px solid rgba(39,194,129,0.25);color:#27c281;font-weight:600;font-size:13px;text-decoration:none;transition:background 0.15s;" onmouseover="this.style.background='rgba(39,194,129,0.18)'" onmouseout="this.style.background='rgba(39,194,129,0.1)'">Analyze &amp; Fix DMARC &#8594;</a>
-                    </div>
-                    <div id="dkim-fix-wrapper" style="display:none;">
-                        <a id="dkim-fix-btn" href="https://ther3boot.com/dkim-analyzer.html" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.25);color:#7c5cff;font-weight:600;font-size:13px;text-decoration:none;transition:background 0.15s;" onmouseover="this.style.background='rgba(124,92,255,0.18)'" onmouseout="this.style.background='rgba(124,92,255,0.1)'">Analyze &amp; Fix DKIM &#8594;</a>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -1469,25 +1202,6 @@
             <a href="/" class="btn-scan">← New Analysis</a>
         </div>
 
-
-        <script id="scan-data" type="application/json">{{ scan_data_json | safe }}</script>
-
-        <div id="share-modal" class="share-modal-overlay" onclick="closeShareModal(event)">
-            <div class="share-modal-box">
-                <div class="smtp-modal-header">
-                    <span>Shareable link</span>
-                    <button class="smtp-modal-close" onclick="closeShareModal()">&times;</button>
-                </div>
-                <p style="color:var(--muted);font-size:13px;margin:8px 0 0;">Anyone with this link can view the report.</p>
-                <div class="share-url-row">
-                    <input id="share-url-input" class="share-url-input" type="text" readonly>
-                    <button class="btn-action" id="share-copy-btn" onclick="copyShareUrl(this)">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                        Copy
-                    </button>
-                </div>
-            </div>
-        </div>
         <!-- Hidden report data for copy -->
         <div id="report-data" style="display:none;">
 MailFlow Sentinel Report — {{ domain }}
@@ -1500,8 +1214,6 @@ DMARC: {% if dmarc %}{{ dmarc }}{% else %}Missing{% endif %}
 
 DKIM: {% if dkim_present %}Detected ({{ dkim_signing_authority.authority }}){% else %}Not detected{% endif %}
 
-Third-Party Senders: {% if email_senders %}{% for esp in email_senders %}{{ esp.name }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}None detected{% endif %}
-
 MX Records:
 {% for m in mx %}  {{ m }}
 {% endfor %}
@@ -1509,7 +1221,6 @@ MTA-STS: {% if mta_sts_record %}Present{% else %}Missing{% endif %}
 TLS-RPT: {% if tls_rpt_record %}Present{% else %}Missing{% endif %}
 BIMI: {% if bimi_record %}Present{% else %}Not configured{% endif %}
 Direct Send: {{ direct_send.status }}
-Catch-All: {% if catch_all.status == "Catch-All Enabled" %}Enabled{% else %}Not detected{% endif %}
 
 {% if recommended_fixes %}Recommended Fixes:
 {% for fix in recommended_fixes %}  - {{ fix }}
@@ -1522,65 +1233,15 @@ Analyzed by mailflowsentinel.com
     </div>
 
     <script>
-        var _COPY_SVG  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>';
-        var _CHECK_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-        function copyRecordBox(btn) {
-            var box = btn.closest('.record-box');
-            var codes = box.querySelectorAll('code');
-            var text;
-            if (codes.length === 1) {
-                text = codes[0].innerText.trim();
-            } else if (codes.length > 1) {
-                text = Array.from(codes).map(function(c) { return c.innerText.trim(); }).join('\n');
-            } else {
-                text = box.innerText.trim();
-            }
-            navigator.clipboard.writeText(text).then(function() {
-                btn.innerHTML = _CHECK_SVG;
+        function copyShareLink(btn) {
+            navigator.clipboard.writeText(window.location.href).then(() => {
                 btn.classList.add('copied');
-                setTimeout(function() {
-                    btn.innerHTML = _COPY_SVG;
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+                setTimeout(() => {
                     btn.classList.remove('copied');
+                    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> Share Results';
                 }, 2000);
             });
-        }
-
-        async function copyShareLink(btn) {
-            const raw = document.getElementById('scan-data');
-            if (!raw) return;
-            const orig = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg> Saving…';
-            try {
-                const resp = await fetch('/share', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: raw.textContent
-                });
-                const data = await resp.json();
-                const url = window.location.origin + data.url;
-                document.getElementById('share-url-input').value = url;
-                document.getElementById('share-modal').classList.add('open');
-            } catch(e) {
-                alert('Could not create share link. Please try again.');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = orig;
-            }
-        }
-
-        function copyShareUrl(btn) {
-            const input = document.getElementById('share-url-input');
-            navigator.clipboard.writeText(input.value).then(() => {
-                btn.classList.add('copied');
-                btn.textContent = 'Copied!';
-                setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy'; }, 2000);
-            });
-        }
-
-        function closeShareModal(e) {
-            var el = document.getElementById('share-modal');
-            if (el && (!e || e.target === el)) el.classList.remove('open');
         }
 
         function copyReport(btn) {
@@ -1590,113 +1251,15 @@ Analyzed by mailflowsentinel.com
                 btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
                 setTimeout(() => {
                     btn.classList.remove('copied');
-                    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy as Text';
+                    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy Report';
                 }, 2000);
             });
         }
-
-        function openSmtpModal() {
-            var el = document.getElementById('smtp-modal');
-            if (el) el.classList.add('open');
-        }
-        function closeSmtpModal(e) {
-            var el = document.getElementById('smtp-modal');
-            if (el && (!e || e.target === el)) el.classList.remove('open');
-        }
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') { closeSmtpModal(); closeShareModal(); }
-        });
-        (function() {
-            var scanEl = document.getElementById('scan-data');
-            if (!scanEl) return;
-            try {
-                var d = JSON.parse(scanEl.textContent);
-                if (d.spf) {
-                    var btn = document.getElementById('spf-fix-btn');
-                    var wrap = document.getElementById('spf-fix-wrapper');
-                    if (btn && wrap) {
-                        btn.href = 'https://ther3boot.com/spf-fix.html?record=' + encodeURIComponent(d.spf);
-                        wrap.style.display = '';
-                    }
-                }
-                if (d.dmarc) {
-                    var dmarcBtn = document.getElementById('dmarc-fix-btn');
-                    var dmarcWrap = document.getElementById('dmarc-fix-wrapper');
-                    if (dmarcBtn && dmarcWrap) {
-                        dmarcBtn.href = 'https://ther3boot.com/dmarc-analyzer.html?record=' + encodeURIComponent(d.dmarc);
-                        dmarcWrap.style.display = '';
-                    }
-                }
-                var hasDkimIssue = (Array.isArray(d.findings) && d.findings.some(function(f) { return f.toUpperCase().indexOf('DKIM') !== -1; })) || !d.dkim_present;
-                if (hasDkimIssue) {
-                    var dkimWrap = document.getElementById('dkim-fix-wrapper');
-                    if (dkimWrap) { dkimWrap.style.display = ''; }
-                }
-            } catch(e) {}
-        })();
-
-        // ── Recent Scans ──────────────────────────────────────────────────────
-        (function() {
-            function _timeAgo(iso) {
-                var s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-                if (s < 60)   return s + 's ago';
-                if (s < 3600) return Math.floor(s / 60) + 'm ago';
-                if (s < 86400) return Math.floor(s / 3600) + 'h ago';
-                return Math.floor(s / 86400) + 'd ago';
-            }
-            function _esc(s) {
-                return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-            }
-            fetch('/recent').then(function(r) { return r.json(); }).then(function(scans) {
-                if (!Array.isArray(scans) || !scans.length) return;
-                var wrap = document.getElementById('recent-scans');
-                var list = document.getElementById('recent-list');
-                if (!wrap || !list) return;
-                scans.slice(0, 5).forEach(function(s) {
-                    var a = document.createElement('a');
-                    a.href = '/analyze?domain=' + encodeURIComponent(s.domain);
-                    a.style.cssText = 'display:inline-flex;align-items:center;gap:7px;padding:5px 13px;border-radius:999px;font-size:12px;font-weight:600;color:var(--muted);background:rgba(255,255,255,0.04);border:1px solid var(--border);text-decoration:none;transition:border-color 0.15s,color 0.15s;white-space:nowrap;';
-                    a.innerHTML = _esc(s.domain) + '<span style="font-weight:400;opacity:0.55;">' + _esc(_timeAgo(s.scanned_at)) + '</span>';
-                    a.addEventListener('mouseover', function() { this.style.borderColor='rgba(90,169,255,0.3)'; this.style.color='var(--accent)'; });
-                    a.addEventListener('mouseout',  function() { this.style.borderColor='var(--border)'; this.style.color='var(--muted)'; });
-                    list.appendChild(a);
-                });
-                wrap.style.display = '';
-            }).catch(function() {});
-        })();
     </script>
 
     <div style="text-align: center; padding: 20px 0 40px; color: rgba(149,163,191,0.4); font-size: 13px; font-family: Inter, sans-serif;">
-        Reboot Labs &nbsp;&middot;&nbsp; R. Siirila &nbsp;&middot;&nbsp; <a href="https://mailflowsentinel.com" style="color: rgba(90,169,255,0.4); text-decoration: none;">mailflowsentinel.com</a> &nbsp;&middot;&nbsp; <a href="https://ther3boot.com/spf-fix.html" style="color: rgba(90,169,255,0.4); text-decoration: none;">SPF Analyzer</a> &nbsp;&middot;&nbsp; <a href="https://ther3boot.com/dmarc-analyzer.html" style="color: rgba(90,169,255,0.4); text-decoration: none;">DMARC Analyzer</a> &nbsp;&middot;&nbsp; <a href="https://ther3boot.com/email-header-analyzer.html" style="color: rgba(90,169,255,0.4); text-decoration: none;">Header Analyzer</a>
+        Built by Ray Siirila &nbsp;&middot;&nbsp; <a href="https://mailflowsentinel.com" style="color: rgba(90,169,255,0.4); text-decoration: none;">mailflowsentinel.com</a>
     </div>
 
-
-    {% if direct_send is defined %}
-    <div id="smtp-modal" class="smtp-modal-overlay" onclick="closeSmtpModal(event)">
-        <div class="smtp-modal-box">
-            <div class="smtp-modal-header">
-                <span>SMTP Probe Trace</span>
-                <button class="smtp-modal-close" onclick="closeSmtpModal()">&times;</button>
-            </div>
-            {% if direct_send.probe_detail %}
-            <div class="smtp-modal-host">Target: {{ direct_send.probe_detail.host or "—" }}</div>
-            <table class="smtp-trace-table">
-                <thead><tr><th>Stage</th><th>Code</th><th>Response</th></tr></thead>
-                <tbody>
-                    {% for row in direct_send.probe_detail.stages %}
-                    <tr>
-                        <td>{{ row.stage }}</td>
-                        <td>{{ row.code }}</td>
-                        <td>{{ row.response }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% endif %}
-        </div>
-    </div>
-    {% endif %}
-
-<script>(function(){var i=document.querySelector("input[name='domain']");if(i)i.addEventListener("input",function(){var p=this.selectionStart;this.value=this.value.toLowerCase();this.setSelectionRange(p,p);});})();</script>
 </body>
 </html>
