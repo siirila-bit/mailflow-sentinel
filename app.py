@@ -812,6 +812,15 @@ def about(request: Request):
     return templates.TemplateResponse(request=request, name="about.html", context={})
 
 
+@app.get("/checklist")
+def checklist():
+    return FileResponse(
+        "/opt/mailflow/M365_Email_Security_Audit_Checklist.pdf",
+        media_type="application/pdf",
+        filename="M365_Email_Security_Audit_Checklist.pdf",
+    )
+
+
 @app.post("/share")
 @limiter.limit("10/minute")
 async def share(request: Request):
