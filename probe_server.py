@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+import re
 import socket
 import ssl
 import dns.resolver
@@ -17,6 +18,20 @@ app.add_middleware(
 PROBE_HELO = "probe.mailflowsentinel.com"
 PROBE_FROM = "probe@mailflowsentinel.com"
 TIMEOUT = 10
+
+# Defensive hostname validation. `domain` is interpolated into raw SMTP
+# commands (MAIL FROM / RCPT TO), so anything containing CRLF, spaces, or
+# control characters must be rejected before a socket is ever opened —
+# otherwise it becomes SMTP command injection.
+_DOMAIN_RE = re.compile(
+    r'^(?=.{1,253}$)'
+    r'(?!-)[a-z0-9-]{1,63}(?<!-)'
+    r'(?:\.(?!-)[a-z0-9-]{1,63}(?<!-))+$'
+)
+
+
+def is_valid_domain(domain: str) -> bool:
+    return bool(_DOMAIN_RE.match(domain))
 
 
 def resolve_eop_host(domain: str) -> str:
@@ -130,101 +145,18 @@ def smtp_probe_direct_send(eop_host: str, domain: str) -> dict:
     return result
 
 
-def smtp_probe_open_relay(mx_host: str, domain: str) -> dict:
-    """
-    Test if a mail server is an open relay.
-    An open relay will accept mail FROM an external domain TO an external domain
-    without authentication.
-    
-    Test: MAIL FROM external → RCPT TO external (neither is the target domain)
-    If accepted = open relay confirmed.
-    """
-    result = {
-        "host": mx_host,
-        "status": "Unknown",
-        "smtp_code": None,
-        "smtp_response": None,
-        "stage": None,
-        "tls_version": None,
-        "banner": None,
-        "ehlo_capabilities": [],
-        "error": None,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
-
-    try:
-        sock, banner, ehlo_resp = smtp_connect(mx_host)
-        result["banner"] = banner.strip()
-        result["stage"] = "connected"
-
-        # Extract TLS version if available
-        if hasattr(sock, "version"):
-            result["tls_version"] = sock.version()
-
-        # Extract EHLO capabilities
-        caps = []
-        for line in ehlo_resp.splitlines():
-            if line.startswith("250-") or line.startswith("250 "):
-                cap = line[4:].strip()
-                if cap and cap != PROBE_HELO:
-                    caps.append(cap)
-        result["ehlo_capabilities"] = caps
-
-        # Open relay test:
-        # From: external address (not the target domain)
-        # To: another external address (not the target domain)
-        relay_from = "test@example-probe-check.com"
-        relay_to = "relay-check@mailflowsentinel-test.com"
-
-        sock.sendall(f"MAIL FROM:<{relay_from}>\r\n".encode())
-        mail_resp = sock.recv(1024).decode(errors="replace")
-        result["stage"] = "mail_from"
-
-        mail_code = int(mail_resp[:3]) if mail_resp[:3].isdigit() else None
-
-        if mail_code != 250:
-            # Server rejected MAIL FROM — not an open relay
-            result["status"] = "Not Open Relay"
-            result["smtp_code"] = mail_code
-            result["smtp_response"] = mail_resp.strip()
-            sock.sendall(b"QUIT\r\n")
-            sock.close()
-            return result
-
-        sock.sendall(f"RCPT TO:<{relay_to}>\r\n".encode())
-        rcpt_resp = sock.recv(1024).decode(errors="replace")
-        result["stage"] = "rcpt_to"
-        result["smtp_response"] = rcpt_resp.strip()
-
-        rcpt_code = int(rcpt_resp[:3]) if rcpt_resp[:3].isdigit() else None
-        result["smtp_code"] = rcpt_code
-
-        if rcpt_code == 250:
-            result["status"] = "Open Relay"
-        elif rcpt_code in [550, 554, 553, 551, 552]:
-            result["status"] = "Not Open Relay"
-        else:
-            result["status"] = "Inconclusive"
-
-        sock.sendall(b"QUIT\r\n")
-        sock.close()
-
-    except socket.timeout:
-        result["status"] = "Timeout"
-        result["error"] = "Connection timed out"
-    except socket.gaierror as e:
-        result["status"] = "DNS Error"
-        result["error"] = str(e)
-    except Exception as e:
-        result["status"] = "Error"
-        result["error"] = str(e)
-
-    return result
-
-
 @app.get("/probe")
 def probe(domain: str = Query(..., description="Domain to probe for direct send")):
     domain = domain.strip().lower()
+    if not is_valid_domain(domain):
+        return {
+            "domain": domain,
+            "status": "Invalid Domain",
+            "reason": "Domain failed validation.",
+            "smtp_code": None,
+            "smtp_response": None,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
     eop_host = resolve_eop_host(domain)
 
     if not eop_host_resolves(eop_host):
@@ -259,49 +191,75 @@ def probe(domain: str = Query(..., description="Domain to probe for direct send"
     return result
 
 
-@app.get("/relay")
-def relay(domain: str = Query(..., description="Domain to test for open relay")):
+def smtp_fingerprint(mx_host: str) -> dict:
     """
-    Test the domain's MX servers for open relay misconfiguration.
-    An open relay will forward email from external senders to external recipients
-    without authentication — enabling spam, phishing, and BEC attacks.
+    Passive fingerprint: connect, EHLO, STARTTLS, and read the banner, negotiated
+    TLS version, and advertised capabilities. No MAIL FROM / RCPT TO — this performs
+    no mail transaction and is not a relay test.
     """
+    result = {
+        "host": mx_host,
+        "banner": None,
+        "tls_version": None,
+        "ehlo_capabilities": [],
+        "error": None,
+    }
+    try:
+        sock, banner, ehlo_resp = smtp_connect(mx_host)
+        result["banner"] = banner.strip()
+
+        if hasattr(sock, "version"):
+            result["tls_version"] = sock.version()
+
+        caps = []
+        for line in ehlo_resp.splitlines():
+            if line.startswith("250-") or line.startswith("250 "):
+                cap = line[4:].strip()
+                if cap and cap != PROBE_HELO:
+                    caps.append(cap)
+        result["ehlo_capabilities"] = caps
+
+        try:
+            sock.sendall(b"QUIT\r\n")
+        except Exception:
+            pass
+        sock.close()
+
+    except socket.timeout:
+        result["error"] = "Timeout"
+    except socket.gaierror as e:
+        result["error"] = str(e)
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result
+
+
+@app.get("/fingerprint")
+def fingerprint(domain: str = Query(..., description="Domain to fingerprint mail servers")):
     domain = domain.strip().lower()
+    if not is_valid_domain(domain):
+        return {
+            "domain": domain,
+            "mx_tested": [],
+            "results": [],
+            "error": "Invalid domain.",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
     mx_hosts = get_mx_hosts(domain)
 
     if not mx_hosts:
         return {
             "domain": domain,
-            "status": "No MX Records",
-            "reason": "No MX records found for this domain.",
+            "mx_tested": [],
             "results": [],
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
-    results = []
-    overall_status = "Not Open Relay"
-
-    for mx_host in mx_hosts[:2]:  # Test top 2 MX hosts
-        probe_result = smtp_probe_open_relay(mx_host, domain)
-        results.append(probe_result)
-
-        if probe_result["status"] == "Open Relay":
-            overall_status = "Open Relay"
-
-    # Build summary reason
-    if overall_status == "Open Relay":
-        reason = (
-            "One or more MX servers accepted relay of mail from an external sender "
-            "to an external recipient without authentication. This server can be used "
-            "to send spam or phishing email impersonating this domain."
-        )
-    else:
-        reason = "MX servers rejected external-to-external relay attempts. No open relay detected."
+    results = [smtp_fingerprint(mx_host) for mx_host in mx_hosts[:2]]
 
     return {
         "domain": domain,
-        "status": overall_status,
-        "reason": reason,
         "mx_tested": [r["host"] for r in results],
         "results": results,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -316,6 +274,13 @@ def health():
 @app.get("/catchall")
 def catchall(domain: str = Query(..., description="Domain to test for catch-all")):
     domain = domain.strip().lower()
+    if not is_valid_domain(domain):
+        return {
+            "domain": domain,
+            "status": "Invalid Domain",
+            "reason": "Domain failed validation.",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
     mx_hosts = get_mx_hosts(domain)
 
     if not mx_hosts:
@@ -385,78 +350,3 @@ def catchall(domain: str = Query(..., description="Domain to test for catch-all"
         result["error"] = str(e)
 
     return result
-
-
-@app.get("/subdomains")
-def subdomains(domain: str = Query(..., description="Domain to check mail subdomains")):
-    """
-    Test common mail-related subdomains for open SMTP ports and relay misconfiguration.
-    Subdomains like mail., smtp., webmail. are often forgotten and left misconfigured.
-    """
-    domain = domain.strip().lower()
-    prefixes = ["mail", "smtp", "webmail", "mx", "mx1", "mx2", "relay", "mailhost", "exchange"]
-    
-    results = []
-    
-    for prefix in prefixes:
-        subdomain = f"{prefix}.{domain}"
-        result = {
-            "subdomain": subdomain,
-            "resolves": False,
-            "smtp_open": False,
-            "banner": None,
-            "tls_version": None,
-            "open_relay": None,
-            "error": None,
-        }
-        
-        # Check if subdomain resolves
-        try:
-            dns.resolver.resolve(subdomain, "A")
-            result["resolves"] = True
-        except Exception:
-            results.append(result)
-            continue
-        
-        # Try SMTP connection
-        try:
-            sock, banner, ehlo_resp = smtp_connect(subdomain)
-            result["smtp_open"] = True
-            result["banner"] = banner.strip()
-            
-            if hasattr(sock, "version"):
-                result["tls_version"] = sock.version()
-            
-            # Quick relay test
-            sock.sendall(f"MAIL FROM:<{PROBE_FROM}>\r\n".encode())
-            mail_resp = sock.recv(1024).decode(errors="replace")
-            
-            if mail_resp.startswith("250"):
-                relay_to = "relay-check@mailflowsentinel-test.com"
-                sock.sendall(f"RCPT TO:<{relay_to}>\r\n".encode())
-                rcpt_resp = sock.recv(1024).decode(errors="replace")
-                code = int(rcpt_resp[:3]) if rcpt_resp[:3].isdigit() else None
-                result["open_relay"] = (code == 250)
-            
-            sock.sendall(b"QUIT\r\n")
-            sock.close()
-            
-        except socket.timeout:
-            result["error"] = "Timeout"
-        except Exception as e:
-            result["error"] = str(e)[:80]
-        
-        results.append(result)
-    
-    # Only return subdomains that resolve
-    found = [r for r in results if r["resolves"]]
-    open_relays = [r["subdomain"] for r in found if r["open_relay"]]
-    
-    return {
-        "domain": domain,
-        "subdomains_found": len(found),
-        "open_relays_found": len(open_relays),
-        "open_relay_hosts": open_relays,
-        "results": found,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }

@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPF Record Analyzer — MailFlow Sentinel</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230b1020'/><path d='M4 10l12 9 12-9' stroke='%235aa9ff' stroke-width='2' fill='none' stroke-linecap='round'/><rect x='4' y='10' width='24' height='16' rx='2' stroke='%235aa9ff' stroke-width='2' fill='none'/></svg>">
+    <style>
+        :root {
+            --bg: #0b1020;
+            --panel: rgba(18, 25, 45, 0.78);
+            --text: #e8edf7;
+            --muted: #95a3bf;
+            --border: rgba(255,255,255,0.08);
+            --accent: #5aa9ff;
+            --accent-2: #7c5cff;
+            --good: #27c281;
+            --warn: #f0b34a;
+            --bad: #ff6b6b;
+            --shadow: 0 18px 50px rgba(0,0,0,0.35);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(90,169,255,0.14), transparent 28%),
+                radial-gradient(circle at top right, rgba(124,92,255,0.14), transparent 30%),
+                linear-gradient(180deg, #09101c 0%, #0b1020 100%);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        .wrap { max-width: 860px; margin: 0 auto; padding: 48px 24px 80px; }
+
+        /* Nav */
+        .topbar {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 44px;
+        }
+        .topbar a {
+            display: inline-flex; align-items: center; gap: 7px;
+            font-size: 13px; font-weight: 600; color: var(--muted);
+            text-decoration: none; transition: color 0.15s;
+        }
+        .topbar a:hover { color: var(--accent); }
+        .topbar-badge {
+            font-size: 13px; font-weight: 600; color: var(--accent);
+            padding: 6px 14px; border-radius: 8px;
+            border: 1px solid rgba(90,169,255,0.3);
+            background: rgba(90,169,255,0.06);
+        }
+
+        /* Hero */
+        .hero-title {
+            font-size: 38px; font-weight: 800; letter-spacing: -0.03em;
+            line-height: 1.08; margin-bottom: 10px;
+        }
+        .hero-title span {
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hero-sub {
+            font-size: 16px; color: var(--muted); line-height: 1.55;
+            margin-bottom: 36px; max-width: 600px;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--panel);
+            backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            border-radius: 20px; padding: 26px 30px; margin-bottom: 18px;
+        }
+        .card-title {
+            font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--accent); margin-bottom: 18px;
+        }
+
+        /* Input */
+        .record-textarea {
+            width: 100%; min-height: 90px; resize: vertical;
+            background: rgba(10,15,30,0.7); border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 12px; padding: 14px 16px;
+            font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", Menlo, monospace;
+            font-size: 13.5px; color: var(--text); line-height: 1.6;
+            outline: none; transition: border-color 0.2s;
+        }
+        .record-textarea:focus { border-color: rgba(90,169,255,0.45); }
+        .record-textarea::placeholder { color: rgba(149,163,191,0.4); }
+        .btn-row { display: flex; gap: 10px; margin-top: 14px; }
+        .btn-analyze {
+            padding: 11px 24px; border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            color: #fff; font-weight: 700; font-size: 14px;
+            border: none; cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+        }
+        .btn-analyze:hover { opacity: 0.88; transform: translateY(-1px); }
+        .btn-analyze:active { transform: translateY(0); }
+        .btn-clear {
+            padding: 11px 18px; border-radius: 10px;
+            background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+            color: var(--muted); font-weight: 600; font-size: 14px;
+            cursor: pointer; transition: background 0.15s;
+        }
+        .btn-clear:hover { background: rgba(255,255,255,0.1); }
+
+        /* Score row */
+        .score-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+        @media (max-width: 560px) { .score-row { grid-template-columns: 1fr 1fr; } }
+        .score-card {
+            background: var(--panel); backdrop-filter: blur(14px);
+            border: 1px solid var(--border); box-shadow: var(--shadow);
+            border-radius: 20px; padding: 22px 24px; text-align: center;
+        }
+        .score-num {
+            font-size: 52px; font-weight: 900; line-height: 1;
+            letter-spacing: -0.04em; margin-bottom: 6px;
+        }
+        .score-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+        .score-sublabel { font-size: 14px; font-weight: 600; margin-top: 4px; }
+
+        /* Severity badges */
+        .badge {
+            display: inline-block; padding: 2px 9px; border-radius: 5px;
+            font-size: 10px; font-weight: 700; letter-spacing: 0.07em;
+            text-transform: uppercase;
+        }
+        .badge-critical { background: rgba(255,107,107,0.18); color: #ff6b6b; border: 1px solid rgba(255,107,107,0.3); }
+        .badge-high     { background: rgba(255,140,50,0.18);  color: #ff8c32; border: 1px solid rgba(255,140,50,0.3); }
+        .badge-medium   { background: rgba(240,179,74,0.18);  color: #f0b34a; border: 1px solid rgba(240,179,74,0.3); }
+        .badge-low      { background: rgba(90,169,255,0.14);  color: #5aa9ff; border: 1px solid rgba(90,169,255,0.25); }
+        .badge-good     { background: rgba(39,194,129,0.14);  color: #27c281; border: 1px solid rgba(39,194,129,0.25); }
+        .badge-info     { background: rgba(149,163,191,0.12); color: #95a3bf; border: 1px solid rgba(149,163,191,0.2); }
+
+        /* Token breakdown */
+        .token-list { display: flex; flex-direction: column; gap: 10px; }
+        .token-item {
+            display: grid; grid-template-columns: minmax(0, 220px) 1fr;
+            align-items: start; gap: 14px;
+            background: rgba(10,15,30,0.5); border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 12px; padding: 12px 16px;
+        }
+        .token-raw {
+            font-family: "JetBrains Mono", "Fira Code", Menlo, monospace;
+            font-size: 12.5px; font-weight: 600;
+            padding: 3px 10px; border-radius: 6px;
+            white-space: normal; word-break: break-all; align-self: start;
+        }
+        .token-body { min-width: 0; overflow-wrap: break-word; }
+        @media (max-width: 600px) {
+            .token-item { grid-template-columns: 1fr; }
+        }
+        .token-mech { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 3px; }
+        .token-desc { font-size: 13px; color: var(--muted); line-height: 1.5; }
+        .token-vendor {
+            font-size: 11px; font-weight: 600; color: var(--good);
+            margin-top: 4px; display: flex; align-items: center; gap: 5px;
+        }
+
+        /* Color classes for token-raw */
+        .tok-version  { background: rgba(149,163,191,0.1); color: var(--muted); border: 1px solid rgba(149,163,191,0.2); }
+        .tok-good     { background: rgba(39,194,129,0.1);  color: #27c281;      border: 1px solid rgba(39,194,129,0.2); }
+        .tok-warn     { background: rgba(240,179,74,0.12); color: #f0b34a;      border: 1px solid rgba(240,179,74,0.25); }
+        .tok-bad      { background: rgba(255,107,107,0.12); color: #ff6b6b;     border: 1px solid rgba(255,107,107,0.25); }
+        .tok-neutral  { background: rgba(90,169,255,0.1);  color: var(--accent); border: 1px solid rgba(90,169,255,0.2); }
+        .tok-critical { background: rgba(255,107,107,0.18); color: #ff6b6b;     border: 1px solid rgba(255,107,107,0.4); }
+
+        /* Issues list */
+        .issue-list { display: flex; flex-direction: column; gap: 12px; }
+        .issue-item { display: flex; gap: 12px; align-items: flex-start; }
+        .issue-body { min-width: 0; }
+        .issue-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+        .issue-detail { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+        /* Fixes list */
+        .fix-list { display: flex; flex-direction: column; gap: 14px; }
+        .fix-item { display: flex; gap: 14px; align-items: flex-start; }
+        .fix-num {
+            flex-shrink: 0; width: 26px; height: 26px;
+            border-radius: 8px; background: rgba(90,169,255,0.12);
+            border: 1px solid rgba(90,169,255,0.22);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 700; color: var(--accent); margin-top: 1px;
+        }
+        .fix-body { min-width: 0; }
+        .fix-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+        .fix-detail { font-size: 13px; color: var(--muted); line-height: 1.55; }
+        .fix-code {
+            font-family: "JetBrains Mono", Menlo, monospace;
+            font-size: 12px; color: var(--accent);
+            background: rgba(90,169,255,0.08); border: 1px solid rgba(90,169,255,0.15);
+            border-radius: 6px; padding: 2px 8px; margin-top: 5px; display: inline-block;
+        }
+
+        /* Corrected record */
+        .corrected-box {
+            background: rgba(10,15,30,0.7); border: 1px solid rgba(39,194,129,0.2);
+            border-radius: 12px; padding: 16px 18px; margin-bottom: 14px;
+            font-family: "JetBrains Mono", "Fira Code", Menlo, monospace;
+            font-size: 13px; color: var(--text); line-height: 1.6;
+            word-break: break-all;
+        }
+        .corrected-box span.tok-added   { color: #27c281; }
+        .corrected-box span.tok-changed { color: #f0b34a; }
+        .corrected-box span.tok-kept    { color: var(--text); }
+        .corrected-box span.tok-removed { color: #ff6b6b; text-decoration: line-through; opacity: 0.6; }
+
+        .btn-copy {
+            display: inline-flex; align-items: center; gap: 7px;
+            padding: 9px 18px; border-radius: 9px;
+            background: rgba(39,194,129,0.12); border: 1px solid rgba(39,194,129,0.25);
+            color: #27c281; font-weight: 600; font-size: 13px;
+            cursor: pointer; transition: background 0.15s; font-family: inherit;
+        }
+        .btn-copy:hover { background: rgba(39,194,129,0.2); }
+
+        .changes-list { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+        .change-item {
+            font-size: 12.5px; color: var(--muted); display: flex;
+            align-items: flex-start; gap: 8px; line-height: 1.5;
+        }
+        .change-dot {
+            width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 5px;
+        }
+        .change-dot-add     { background: #27c281; }
+        .change-dot-change  { background: #f0b34a; }
+        .change-dot-remove  { background: #ff6b6b; }
+
+        /* Vendor grid */
+        .vendor-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+        .vendor-chip {
+            display: flex; flex-direction: column; gap: 3px;
+            background: rgba(90,169,255,0.07); border: 1px solid rgba(90,169,255,0.16);
+            border-radius: 10px; padding: 10px 14px;
+        }
+        .vendor-name { font-size: 13px; font-weight: 600; color: var(--accent); }
+        .vendor-domain { font-family: monospace; font-size: 11px; color: rgba(149,163,191,0.7); }
+
+        /* CTA */
+        .cta-card {
+            background: linear-gradient(135deg, rgba(90,169,255,0.08), rgba(124,92,255,0.08));
+            border: 1px solid rgba(90,169,255,0.18);
+        }
+        .cta-card p { font-size: 15px; color: var(--muted); line-height: 1.6; margin-bottom: 18px; }
+        .cta-link {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 12px 22px; border-radius: 12px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            color: #fff; font-weight: 700; font-size: 14px;
+            text-decoration: none; transition: opacity 0.2s, transform 0.1s;
+            box-shadow: 0 8px 22px rgba(92,122,255,0.28);
+        }
+        .cta-link:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        /* Divider */
+        .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+        /* Hidden */
+        .hidden { display: none; }
+
+        /* Footer */
+        .footer { text-align: center; padding: 28px 0 0; color: rgba(149,163,191,0.35); font-size: 12px; }
+        .footer a { color: rgba(90,169,255,0.4); text-decoration: none; }
+        .footer a:hover { color: rgba(90,169,255,0.7); }
+
+        code {
+            font-family: "JetBrains Mono", Menlo, monospace;
+            font-size: 12px; background: rgba(90,169,255,0.08);
+            border: 1px solid rgba(90,169,255,0.15); border-radius: 4px; padding: 1px 6px;
+            color: var(--accent);
+        }
+    
+        /* ── Badge popover ──────────────────────────────────────────────── */
+        .badge-wrap { position: relative; }
+        .topbar-badge { cursor: pointer; user-select: none; }
+        .badge-popover {
+            position: absolute; top: calc(100% + 10px); right: 0;
+            width: 260px;
+            background: rgba(11, 17, 35, 0.98);
+            border: 1px solid rgba(90,169,255,0.22);
+            border-radius: 12px; padding: 14px 16px;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.55);
+            z-index: 200; display: none;
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        }
+        .badge-popover.open { display: block; }
+        .badge-popover-text {
+            font-size: 13px; color: var(--muted); line-height: 1.55;
+            margin: 0 0 12px;
+        }
+        .badge-popover-link {
+            display: inline-flex; align-items: center; gap: 5px;
+            font-size: 12px; font-weight: 700; color: var(--accent);
+            text-decoration: none;
+        }
+        .badge-popover-link svg { transition: transform 0.15s; }
+        .badge-popover-link:hover svg { transform: translateX(2px); }
+    </style>
+</head>
+<body>
+<div class="wrap">
+
+    <div class="topbar">
+        <a href="https://mailflowsentinel.com">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            mailflowsentinel.com
+        </a>
+        <div class="badge-wrap">
+        <span class="topbar-badge" id="badge-btn">SPF Record Analyzer</span>
+        <div class="badge-popover" id="badge-popover">
+            <p class="badge-popover-text">Analyze and repair any SPF record. Understand your DNS lookup count, spot misconfigurations, and get a corrected record ready to publish.</p>        </div>
+    </div>
+    </div>
+
+    <h1 class="hero-title"><span>SPF</span> Record Analyzer</h1>
+    <p class="hero-sub">Paste any SPF record for a token-by-token breakdown, score out of 100, detected vendors, and a corrected record ready to deploy.</p>
+
+    <div class="card">
+        <div class="card-title">Your SPF Record</div>
+        <textarea
+            id="record-input"
+            class="record-textarea"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="v=spf1 include:spf.protection.outlook.com include:sendgrid.net ip4:203.0.113.10 ~all"
+        ></textarea>
+        <div class="btn-row">
+            <button class="btn-analyze" onclick="runAnalysis()">Analyze Record</button>
+            <button class="btn-clear" onclick="clearAll()">Clear</button>
+        </div>
+    </div>
+
+    <div id="results" class="hidden">
+
+        <p id="verdict" style="font-size:16px;font-weight:600;line-height:1.55;margin-bottom:18px;padding:14px 18px 14px 20px;background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--border);border-left:3px solid var(--muted);border-radius:14px;display:none;"></p>
+
+        <!-- Score row -->
+        <div class="score-row">
+            <div class="score-card">
+                <div id="score-num" class="score-num">—</div>
+                <div class="score-label">Score / 100</div>
+                <div id="score-sublabel" class="score-sublabel">—</div>
+            </div>
+            <div class="score-card">
+                <div id="lookup-num" class="score-num" style="font-size:42px;">—</div>
+                <div class="score-label">DNS Lookups</div>
+                <div id="lookup-sublabel" class="score-sublabel">—</div>
+            </div>
+            <div class="score-card">
+                <div id="all-mech" class="score-num" style="font-size:28px;font-family:'JetBrains Mono',Menlo,monospace;">—</div>
+                <div class="score-label">All Mechanism</div>
+                <div id="all-sublabel" class="score-sublabel">—</div>
+            </div>
+        </div>
+
+        <!-- Token breakdown -->
+        <div class="card">
+            <div class="card-title">Token Breakdown</div>
+            <div id="token-list" class="token-list"></div>
+        </div>
+
+        <!-- Vendors -->
+        <div id="vendor-card" class="card hidden">
+            <div class="card-title">Detected Senders &amp; Vendors</div>
+            <div id="vendor-grid" class="vendor-grid"></div>
+        </div>
+
+        <!-- Issues -->
+        <div id="issues-card" class="card hidden">
+            <div class="card-title">Issues Found</div>
+            <div id="issue-list" class="issue-list"></div>
+        </div>
+
+        <!-- Recommended Fixes -->
+        <div id="fixes-card" class="card hidden">
+            <div class="card-title">Recommended Fixes</div>
+            <div id="fix-list" class="fix-list"></div>
+        </div>
+
+        <!-- Corrected Record -->
+        <div class="card">
+            <div class="card-title">Corrected Record</div>
+            <div id="corrected-box" class="corrected-box"></div>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                <button class="btn-copy" onclick="copyRecord()" id="copy-btn">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    Copy Record
+                </button>
+                <span id="copy-confirm" class="hidden" style="font-size:12px;color:var(--good);font-weight:600;">Copied to clipboard</span>
+            </div>
+            <div id="changes-list" class="changes-list"></div>
+        </div>
+
+        <!-- CTA -->
+        <div class="card cta-card">
+            <div class="card-title">Run a Live Domain Scan</div>
+            <p>This tool analyzes records you paste. For a full live scan — recursive SPF lookup counting, DMARC enforcement, DKIM key detection, direct send exposure, and open relay testing — run a real-time check on your domain.</p>
+            <a href="https://mailflowsentinel.com" class="cta-link" target="_blank" rel="noopener">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                Open MailFlow Sentinel
+            </a>
+        </div>
+
+    </div><!-- /results -->
+
+        <div class="footer">
+        Reboot Labs &nbsp;&middot;&nbsp; Siirila &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com">mailflowsentinel.com</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/dmarc-analyzer.html">DMARC</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/spf-fix.html">SPF</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/email-header-analyzer.html">Headers</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/dkim-analyzer.html">DKIM</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/url-scanner.html">URL Scanner</a>
+    </div>
+
+</div><!-- /wrap -->
+
+<script>
+// ─── Vendor map ───────────────────────────────────────────────────────────────
+const VENDORS = [
+    ['spf.protection.outlook.com', 'Microsoft 365'],
+    ['protection.outlook.com',     'Microsoft 365'],
+    ['outlook.com',                'Microsoft 365'],
+    ['_spf.google.com',            'Google Workspace'],
+    ['_netblocks.google.com',      'Google Workspace'],
+    ['google.com',                 'Google Workspace'],
+    ['sendgrid.net',               'SendGrid'],
+    ['spf.mandrillapp.com',        'Mailchimp / Mandrill'],
+    ['mailchimp.com',              'Mailchimp'],
+    ['barracudanetworks.com',      'Barracuda'],
+    ['proofpoint.com',             'Proofpoint'],
+    ['pphosted.com',               'Proofpoint'],
+    ['mimecast.com',               'Mimecast'],
+    ['salesforce.com',             'Salesforce'],
+    ['exacttarget.com',            'Salesforce Marketing Cloud'],
+    ['smtp.salesforce.com',        'Salesforce'],
+    ['hubspot.com',                'HubSpot'],
+    ['hubspotemail.net',           'HubSpot'],
+    ['hs-spf.emandrx.com',        'HubSpot'],
+    ['mailgun.org',                'Mailgun'],
+    ['spf.mtasv.net',              'Postmark'],
+    ['mtasv.net',                  'Postmark'],
+    ['amazonses.com',              'Amazon SES'],
+    ['zendesk.com',                'Zendesk'],
+    ['klaviyo.com',                'Klaviyo'],
+    ['klayviomail.com',            'Klaviyo'],
+    ['activecampaign.com',         'ActiveCampaign'],
+    ['constantcontact.com',        'Constant Contact'],
+    ['cmail1.com',                 'Campaign Monitor'],
+    ['createsend.com',             'Campaign Monitor'],
+    ['zohomail.com',               'Zoho Mail'],
+    ['zoho.com',                   'Zoho'],
+    ['intercom-mail.com',          'Intercom'],
+    ['intercom.io',                'Intercom'],
+    ['freshdesk.com',              'Freshdesk'],
+    ['helpscoutemail.com',         'Help Scout'],
+    ['mailjet.com',                'Mailjet'],
+    ['sparkpostmail.com',          'SparkPost'],
+    ['sparkpostemailing.com',      'SparkPost'],
+    ['messagingengine.com',        'Fastmail'],
+    ['mxthunder.com',              'SpamExperts'],
+    ['emailsrvr.com',              'Rackspace Email'],
+    ['authsmtp.com',               'AuthSMTP'],
+    ['smtp.com',                   'SMTP.com'],
+    ['bluehost.com',               'Bluehost'],
+    ['hostgator.com',              'HostGator'],
+    ['dreamhost.com',              'DreamHost'],
+    ['icontact.com',               'iContact'],
+    ['brevo.com',                  'Brevo (Sendinblue)'],
+    ['sendinblue.com',             'Brevo (Sendinblue)'],
+    ['drip.com',                   'Drip'],
+    ['omnisend.com',               'Omnisend'],
+    ['mailersend.com',             'MailerSend'],
+    ['customer.io',                'Customer.io'],
+    ['iterable.com',               'Iterable'],
+    ['sailthru.com',               'Sailthru'],
+    ['responsys.net',              'Oracle Responsys'],
+    ['exacttarget.com',            'Salesforce Marketing Cloud'],
+    ['marketo.com',                'Marketo'],
+    ['marketo.net',                'Marketo'],
+    ['pardot.com',                 'Salesforce Pardot'],
+    ['abnormalsecurity.com',       'Abnormal Security'],
+    ['proofpointessentials.com',   'Proofpoint Essentials'],
+];
+
+function detectVendor(domain) {
+    const d = domain.toLowerCase();
+    for (const [pattern, name] of VENDORS) {
+        if (d === pattern || d.endsWith('.' + pattern)) return name;
+    }
+    return null;
+}
+
+// ─── SPF Parser ───────────────────────────────────────────────────────────────
+function parseToken(raw) {
+    const qualChars = ['+', '-', '~', '?'];
+    let qualifier = '+';
+    let rest = raw;
+    if (qualChars.includes(raw[0])) {
+        qualifier = raw[0];
+        rest = raw.slice(1);
+    }
+    const lower = rest.toLowerCase();
+    const colonIdx = rest.indexOf(':');
+    const eqIdx    = rest.indexOf('=');
+
+    let mechanism, value;
+    if (colonIdx !== -1 && (eqIdx === -1 || colonIdx < eqIdx)) {
+        mechanism = rest.slice(0, colonIdx).toLowerCase();
+        value     = rest.slice(colonIdx + 1);
+    } else if (eqIdx !== -1) {
+        mechanism = rest.slice(0, eqIdx).toLowerCase();
+        value     = rest.slice(eqIdx + 1);
+    } else {
+        mechanism = lower;
+        value     = '';
+    }
+    return { raw, qualifier, mechanism, value };
+}
+
+function cidrSize(prefix) {
+    const bits = parseInt(prefix, 10);
+    if (isNaN(bits)) return 1;
+    return Math.pow(2, 32 - bits);
+}
+
+const LOOKUP_MECHS = new Set(['include','a','mx','ptr','exists','redirect']);
+
+function analyzeSPF(record) {
+    const text = record.trim();
+    if (!text) return null;
+
+    const rawTokens = text.split(/\s+/);
+
+    if (rawTokens[0].toLowerCase() !== 'v=spf1') {
+        return {
+            valid: false,
+            error: 'Record must begin with v=spf1. This does not appear to be a valid SPF record.',
+            tokens: [], lookupCount: 0, allToken: null,
+            vendors: [], issues: [], score: 0, corrected: { record: '', changes: [] }
+        };
+    }
+
+    const tokens = rawTokens.map((raw, i) => {
+        if (i === 0) return { raw, qualifier: null, mechanism: 'version', value: '1' };
+        return parseToken(raw);
+    });
+
+    // Lookup count (surface level — real count may be higher due to recursive includes)
+    let lookupCount = 0;
+    for (const t of tokens) {
+        if (LOOKUP_MECHS.has(t.mechanism)) lookupCount++;
+    }
+
+    // Find all mechanism(s)
+    const allTokens = tokens.filter(t => t.mechanism === 'all');
+    const allToken  = allTokens[0] || null;
+
+    // Detect redirect
+    const redirectToken = tokens.find(t => t.mechanism === 'redirect');
+
+    // Detect vendors
+    const vendors = [];
+    const seenVendors = new Set();
+    for (const t of tokens) {
+        if (t.mechanism === 'include' && t.value) {
+            const v = detectVendor(t.value);
+            if (v && !seenVendors.has(v)) {
+                seenVendors.add(v);
+                vendors.push({ domain: t.value, name: v });
+            }
+        }
+    }
+
+    // Issues + scoring
+    let score = 100;
+    const issues = [];
+
+    // +all
+    if (allToken && allToken.qualifier === '+') {
+        score -= 50;
+        issues.push({
+            severity: 'critical',
+            title: 'SPF uses +all — any server on the internet can send as your domain',
+            detail: 'The +all mechanism passes every sender not matched by earlier rules. This completely negates any protection SPF provides and allows anyone to spoof your domain.',
+            fix: 'Replace +all with -all',
+            deduction: 50
+        });
+    }
+    // ?all
+    else if (allToken && allToken.qualifier === '?') {
+        score -= 30;
+        issues.push({
+            severity: 'critical',
+            title: 'SPF uses ?all — neutral result provides no protection',
+            detail: 'The ?all mechanism returns a Neutral result for all unmatched senders, meaning SPF cannot be used to reject unauthorized mail. Functionally equivalent to having no SPF at all.',
+            fix: 'Replace ?all with -all',
+            deduction: 30
+        });
+    }
+    // ~all
+    else if (allToken && allToken.qualifier === '~') {
+        score -= 10;
+        issues.push({
+            severity: 'high',
+            title: 'SPF uses ~all (softfail) — unauthorized senders may still be delivered',
+            detail: 'SoftFail (~all) suggests but does not enforce rejection. Most receiving mail servers will deliver softfail messages with a spam flag rather than reject them outright.',
+            fix: 'Replace ~all with -all to enforce rejection',
+            deduction: 10
+        });
+    }
+    // No all at all
+    else if (!allToken && !redirectToken) {
+        score -= 20;
+        issues.push({
+            severity: 'high',
+            title: 'No all mechanism — record is incomplete',
+            detail: 'An SPF record without an all mechanism at the end leaves disposition undefined for senders not matched by any rule. Best practice requires ending every SPF record with -all.',
+            fix: 'Add -all at the end of the record',
+            deduction: 20
+        });
+    }
+
+    // Multiple all mechanisms
+    if (allTokens.length > 1) {
+        issues.push({
+            severity: 'medium',
+            title: 'Multiple all mechanisms detected',
+            detail: 'Only the first all mechanism is evaluated; subsequent ones are ignored. Remove duplicates to avoid confusion.',
+            fix: 'Keep only one all mechanism at the end',
+            deduction: 0
+        });
+    }
+
+    // DNS lookups
+    if (lookupCount > 10) {
+        const over = lookupCount - 10;
+        score -= 25;
+        issues.push({
+            severity: 'critical',
+            title: `SPF exceeds the 10 DNS lookup limit (${lookupCount} surface-level lookups)`,
+            detail: `RFC 7208 limits SPF evaluation to 10 DNS-lookup-consuming mechanisms. Records exceeding this cause a permerror, meaning your SPF record fails to evaluate and receivers may treat it as if no SPF exists. Note: include: chains recurse, so your actual count may be even higher than ${lookupCount}.`,
+            fix: `Remove or consolidate ${over} include:, a, mx, or exists: mechanisms`,
+            deduction: 25
+        });
+    } else if (lookupCount >= 8) {
+        score -= 10;
+        issues.push({
+            severity: 'medium',
+            title: `DNS lookup count approaching the limit (${lookupCount}/10 surface-level)`,
+            detail: 'You are close to the RFC 7208 limit of 10 DNS-consuming lookups. Because include: chains are recursive, your actual evaluation count is likely higher. Adding more senders could push you over.',
+            fix: 'Audit your include: directives and consolidate where possible',
+            deduction: 10
+        });
+    }
+
+    // ptr mechanism
+    const ptrTokens = tokens.filter(t => t.mechanism === 'ptr');
+    if (ptrTokens.length > 0) {
+        score -= 5;
+        issues.push({
+            severity: 'medium',
+            title: 'PTR mechanism is deprecated',
+            detail: 'RFC 7208 explicitly recommends against using the ptr: mechanism. It is slow, unreliable, and generates additional DNS lookups. It should be replaced with ip4: or ip6: ranges.',
+            fix: 'Remove ptr: and replace with explicit ip4:/ip6: ranges',
+            deduction: 5
+        });
+    }
+
+    // Large IP ranges
+    const largeRanges = [];
+    for (const t of tokens) {
+        if ((t.mechanism === 'ip4' || t.mechanism === 'ip6') && t.value.includes('/')) {
+            const [, prefix] = t.value.split('/');
+            if (t.mechanism === 'ip4') {
+                const size = cidrSize(prefix);
+                if (size >= 65536) {
+                    largeRanges.push(t.raw);
+                    score -= 5;
+                }
+            }
+        }
+    }
+    if (largeRanges.length > 0) {
+        issues.push({
+            severity: 'medium',
+            title: `Overly broad IP range${largeRanges.length > 1 ? 's' : ''} authorized`,
+            detail: `${largeRanges.join(', ')} authorizes a large block of IP addresses. A /16 covers 65,536 IPs; a /8 covers 16.7 million. Prefer tighter /24 or /32 ranges to limit your attack surface.`,
+            fix: 'Narrow IP ranges to the smallest block that covers your sending infrastructure',
+            deduction: 5 * largeRanges.length
+        });
+    }
+
+    // redirect with other mechanisms
+    if (redirectToken) {
+        const others = tokens.filter(t =>
+            t.mechanism !== 'version' &&
+            t.mechanism !== 'redirect' &&
+            t.mechanism !== 'exp'
+        );
+        if (others.length > 0) {
+            issues.push({
+                severity: 'low',
+                title: 'redirect= modifier present alongside other mechanisms',
+                detail: 'When redirect= is used, all other mechanisms (except exp=) are ignored. The redirect replaces the entire record. Remove other mechanisms to avoid confusion.',
+                fix: 'Use either redirect= or mechanisms + all — not both',
+                deduction: 0
+            });
+        }
+    }
+
+    score = Math.max(0, score);
+
+    // Sort issues: critical → high → medium → low
+    const sevOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+    issues.sort((a, b) => sevOrder[a.severity] - sevOrder[b.severity]);
+
+    // Build corrected record
+    const corrected = buildCorrected(tokens, redirectToken);
+
+    return {
+        valid: true,
+        tokens,
+        lookupCount,
+        allToken,
+        redirectToken: redirectToken || null,
+        vendors,
+        issues,
+        score,
+        corrected
+    };
+}
+
+function buildCorrected(tokens, redirectToken) {
+    const parts = ['v=spf1'];
+    const changes = [];
+    let foundAll = false;
+
+    for (const t of tokens) {
+        if (t.mechanism === 'version') continue;
+
+        // Remove ptr
+        if (t.mechanism === 'ptr') {
+            changes.push({ type: 'remove', raw: t.raw, reason: 'PTR mechanism is deprecated (RFC 7208 §5.5)' });
+            continue;
+        }
+
+        // Handle all
+        if (t.mechanism === 'all') {
+            if (foundAll) {
+                changes.push({ type: 'remove', raw: t.raw, reason: 'Duplicate all mechanism removed' });
+                continue;
+            }
+            foundAll = true;
+            if (t.qualifier !== '-') {
+                const qualName = { '+': 'pass (+all)', '~': 'softfail (~all)', '?': 'neutral (?all)' }[t.qualifier] || t.qualifier;
+                changes.push({ type: 'change', from: t.raw, to: '-all', reason: `Hardened from ${qualName} to hardfail (-all)` });
+                parts.push('-all');
+            } else {
+                parts.push('-all');
+            }
+            continue;
+        }
+
+        parts.push(t.raw);
+    }
+
+    // Add -all if missing (and no redirect=)
+    if (!foundAll && !redirectToken) {
+        parts.push('-all');
+        changes.push({ type: 'add', raw: '-all', reason: 'Added -all to define a default rejection policy' });
+    }
+
+    return { record: parts.join(' '), changes };
+}
+
+// ─── Token display helpers ────────────────────────────────────────────────────
+function tokenColorClass(t) {
+    if (t.mechanism === 'version') return 'tok-version';
+    if (t.mechanism === 'all') {
+        if (t.qualifier === '-') return 'tok-good';
+        if (t.qualifier === '+') return 'tok-critical';
+        if (t.qualifier === '~') return 'tok-warn';
+        if (t.qualifier === '?') return 'tok-bad';
+    }
+    if (t.mechanism === 'ptr') return 'tok-bad';
+    if (t.mechanism === 'ip4' || t.mechanism === 'ip6') return 'tok-neutral';
+    if (t.mechanism === 'include' || t.mechanism === 'a' || t.mechanism === 'mx') return 'tok-neutral';
+    if (t.mechanism === 'redirect') return 'tok-neutral';
+    return 'tok-version';
+}
+
+function qualifierLabel(q) {
+    return { '+': 'Pass', '-': 'Fail', '~': 'SoftFail', '?': 'Neutral' }[q] || '';
+}
+
+function tokenMechLabel(t) {
+    if (t.mechanism === 'version') return 'Version';
+    const q = t.qualifier !== '+' ? `${qualifierLabel(t.qualifier)} · ` : '';
+    const mechs = {
+        'all': 'All Senders',
+        'ip4': 'IPv4 Address',
+        'ip6': 'IPv6 Address',
+        'a':   'A Record',
+        'mx':  'MX Record',
+        'ptr': 'PTR (deprecated)',
+        'include':  'Include',
+        'exists':   'Exists',
+        'redirect': 'Redirect',
+        'exp':      'Explanation',
+    };
+    return q + (mechs[t.mechanism] || t.mechanism.toUpperCase());
+}
+
+function tokenDescription(t) {
+    const v = t.value;
+    switch (t.mechanism) {
+        case 'version':
+            return 'Identifies this TXT record as an SPF record. Must be the first token.';
+        case 'all':
+            if (t.qualifier === '-') return 'Rejects all senders not explicitly authorized above. This is the correct hardened default.';
+            if (t.qualifier === '+') return 'CRITICAL: Passes every sender not matched by earlier rules — any server on the internet can send as your domain.';
+            if (t.qualifier === '~') return 'SoftFail: Unauthorized senders may still be delivered, typically marked as spam. Harden to -all.';
+            if (t.qualifier === '?') return 'Neutral: Returns no opinion on unmatched senders — equivalent to having no policy. Replace with -all.';
+            return 'Catch-all fallback for senders not matched by any earlier mechanism.';
+        case 'ip4':
+            {
+                const hasCidr = v.includes('/');
+                const [addr, prefix] = v.split('/');
+                if (hasCidr) {
+                    const size = cidrSize(prefix);
+                    const warn = size >= 65536 ? ` Warning: /${prefix} covers ${size.toLocaleString()} addresses — consider narrowing this range.` : '';
+                    return `Authorizes the IPv4 range ${v} (${size.toLocaleString()} address${size !== 1 ? 'es' : ''}) to send mail.${warn}`;
+                }
+                return `Authorizes the single IPv4 address ${v} to send mail.`;
+            }
+        case 'ip6':
+            return `Authorizes IPv6 address${v.includes('/') ? ' range' : ''} ${v} to send mail.`;
+        case 'a':
+            return v
+                ? `Authorizes the IP addresses in ${v}'s DNS A record to send mail. Costs 1 DNS lookup.`
+                : "Authorizes this domain's own A record IPs to send mail. Costs 1 DNS lookup.";
+        case 'mx':
+            return v
+                ? `Authorizes the mail servers listed in ${v}'s MX records to send mail. Costs 1 DNS lookup.`
+                : "Authorizes this domain's own MX server IPs to send mail. Costs 1 DNS lookup.";
+        case 'ptr':
+            return `DEPRECATED: Checks reverse DNS (PTR) for ${v || 'this domain'}. RFC 7208 recommends against this — it is slow, unreliable, and costs 1 DNS lookup.`;
+        case 'include':
+            return `Imports the SPF authorization policy from ${v}. Mail servers authorized by ${v}'s SPF record are also authorized here. Costs 1 DNS lookup (and their internal lookups also count toward your limit).`;
+        case 'exists':
+            return `Passes if a DNS A record exists for ${v}. Used for complex dynamic authorization schemes. Costs 1 DNS lookup.`;
+        case 'redirect':
+            return `Replaces this entire SPF record with the policy from ${v}. All mechanisms after redirect= are ignored. Costs 1 DNS lookup.`;
+        case 'exp':
+            return `Provides a human-readable explanation message for SPF failures, fetched from ${v}. Does not affect authentication results.`;
+        default:
+            return `Unrecognized token: ${t.raw}`;
+    }
+}
+
+// ─── Rendering ────────────────────────────────────────────────────────────────
+let _correctedRecord = '';
+
+function buildVerdict(analysis) {
+    if (!analysis.valid) return { text: analysis.error || 'Invalid SPF record.', color: 'var(--bad)' };
+    const s = analysis.score;
+    const all = analysis.allToken;
+    const lc = analysis.lookupCount;
+    if (all && all.qualifier === '+')
+        return { text: 'Your SPF record uses +all — every server on the internet is authorized to send as your domain, rendering SPF useless.', color: 'var(--bad)' };
+    if (all && all.qualifier === '?')
+        return { text: 'Your SPF record uses ?all (neutral) — receivers cannot use it to reject unauthorized senders, providing no spoofing protection.', color: 'var(--bad)' };
+    if (lc > 10)
+        return { text: `Your SPF record has ${lc} surface-level DNS lookups, exceeding the RFC 7208 limit of 10 — it will fail to evaluate and receivers may treat it as if no SPF record exists.`, color: 'var(--bad)' };
+    if (!all && !analysis.redirectToken)
+        return { text: 'Your SPF record is missing an all mechanism — the fallback policy for unlisted senders is undefined.', color: '#ff8c32' };
+    if (all && all.qualifier === '~')
+        return { text: 'Your SPF record uses softfail (~all) — unauthorized senders may still be delivered to inboxes rather than rejected outright. Harden to -all.', color: 'var(--warn)' };
+    if (s >= 80)
+        return { text: 'Your SPF record is well configured and will reject unauthorized senders.', color: 'var(--good)' };
+    if (s >= 60)
+        return { text: 'Your SPF record is mostly configured but has issues that should be addressed to strengthen enforcement.', color: 'var(--warn)' };
+    return { text: 'Your SPF record has significant issues — unauthorized senders may bypass rejection and reach recipients\'s inboxes.', color: '#ff8c32' };
+}
+
+function renderResults(analysis) {
+    if (!analysis) return;
+    document.getElementById('results').classList.remove('hidden');
+
+    const verdictEl = document.getElementById('verdict');
+    if (verdictEl) {
+        const v = buildVerdict(analysis);
+        verdictEl.textContent = v.text;
+        verdictEl.style.borderLeftColor = v.color;
+        verdictEl.style.color = v.color;
+        verdictEl.style.display = '';
+    }
+
+    if (!analysis.valid) {
+        document.getElementById('score-num').textContent     = '—';
+        document.getElementById('score-sublabel').textContent = analysis.error;
+        document.getElementById('score-sublabel').style.color = 'var(--bad)';
+        document.getElementById('lookup-num').textContent    = '—';
+        document.getElementById('lookup-sublabel').textContent = '';
+        document.getElementById('all-mech').textContent      = '—';
+        document.getElementById('all-sublabel').textContent  = '';
+        document.getElementById('token-list').innerHTML      = '';
+        document.getElementById('vendor-card').classList.add('hidden');
+        document.getElementById('issues-card').classList.add('hidden');
+        document.getElementById('fixes-card').classList.add('hidden');
+        document.getElementById('corrected-box').textContent = '';
+        document.getElementById('changes-list').innerHTML    = '';
+        return;
+    }
+
+    // Score
+    const s = analysis.score;
+    const scoreEl = document.getElementById('score-num');
+    scoreEl.textContent = s;
+    scoreEl.style.color = s >= 80 ? 'var(--good)' : s >= 60 ? 'var(--warn)' : '#ff8c32';
+    const sublabelEl = document.getElementById('score-sublabel');
+    sublabelEl.textContent = s >= 80 ? 'Well configured' : s >= 60 ? 'Needs hardening' : s >= 40 ? 'Significant issues' : 'Critical problems';
+    sublabelEl.style.color  = s >= 80 ? 'var(--good)' : s >= 60 ? 'var(--warn)' : 'var(--bad)';
+
+    // Lookups
+    const lc = analysis.lookupCount;
+    const lookupEl = document.getElementById('lookup-num');
+    lookupEl.textContent = `${lc} / 10`;
+    lookupEl.style.color = lc > 10 ? 'var(--bad)' : lc >= 8 ? 'var(--warn)' : 'var(--good)';
+    const lookupSub = document.getElementById('lookup-sublabel');
+    lookupSub.textContent = lc > 10 ? 'RFC limit exceeded' : lc >= 8 ? 'Approaching limit' : 'Within RFC limit';
+    lookupSub.style.color  = lc > 10 ? 'var(--bad)'  : lc >= 8 ? 'var(--warn)' : 'var(--good)';
+
+    // All mechanism
+    const allEl    = document.getElementById('all-mech');
+    const allSubEl = document.getElementById('all-sublabel');
+    if (analysis.allToken) {
+        allEl.textContent = analysis.allToken.raw;
+        const qColors = { '-': 'var(--good)', '+': 'var(--bad)', '~': 'var(--warn)', '?': '#ff8c32' };
+        allEl.style.color  = qColors[analysis.allToken.qualifier] || 'var(--text)';
+        const qLabels = { '-': 'Hardfail (correct)', '+': 'Pass — critical', '~': 'Softfail', '?': 'Neutral — no protection' };
+        allSubEl.textContent = qLabels[analysis.allToken.qualifier] || '';
+        allSubEl.style.color = qColors[analysis.allToken.qualifier] || 'var(--text)';
+    } else if (analysis.redirectToken) {
+        allEl.textContent      = 'redirect=';
+        allEl.style.color      = 'var(--accent)';
+        allSubEl.textContent   = 'Redirect in use';
+        allSubEl.style.color   = 'var(--muted)';
+    } else {
+        allEl.textContent      = 'missing';
+        allEl.style.color      = 'var(--bad)';
+        allSubEl.textContent   = 'No fallback policy';
+        allSubEl.style.color   = 'var(--bad)';
+    }
+
+    // Tokens
+    const tokenList = document.getElementById('token-list');
+    tokenList.innerHTML = '';
+    for (const t of analysis.tokens) {
+        const desc    = tokenDescription(t);
+        const vendor  = (t.mechanism === 'include' && t.value) ? detectVendor(t.value) : null;
+        const colorCls = tokenColorClass(t);
+        const mechLabel = tokenMechLabel(t);
+
+        const row = document.createElement('div');
+        row.className = 'token-item';
+        row.innerHTML = `
+            <div class="token-raw ${colorCls}">${esc(t.raw)}</div>
+            <div class="token-body">
+                <div class="token-mech">${esc(mechLabel)}</div>
+                <div class="token-desc">${esc(desc)}</div>
+                ${vendor ? `<div class="token-vendor"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>${esc(vendor)}</div>` : ''}
+            </div>
+        `;
+        tokenList.appendChild(row);
+    }
+
+    // Vendors
+    const vendorCard = document.getElementById('vendor-card');
+    if (analysis.vendors.length > 0) {
+        vendorCard.classList.remove('hidden');
+        const grid = document.getElementById('vendor-grid');
+        grid.innerHTML = '';
+        for (const v of analysis.vendors) {
+            const chip = document.createElement('div');
+            chip.className = 'vendor-chip';
+            chip.innerHTML = `<div class="vendor-name">${esc(v.name)}</div><div class="vendor-domain">${esc(v.domain)}</div>`;
+            grid.appendChild(chip);
+        }
+    } else {
+        vendorCard.classList.add('hidden');
+    }
+
+    // Issues
+    const issuesCard = document.getElementById('issues-card');
+    if (analysis.issues.length > 0) {
+        issuesCard.classList.remove('hidden');
+        const list = document.getElementById('issue-list');
+        list.innerHTML = '';
+        for (const issue of analysis.issues) {
+            const item = document.createElement('div');
+            item.className = 'issue-item';
+            item.innerHTML = `
+                <div style="padding-top:1px;flex-shrink:0;"><span class="badge badge-${issue.severity}">${issue.severity}</span></div>
+                <div class="issue-body">
+                    <div class="issue-title">${esc(issue.title)}</div>
+                    <div class="issue-detail">${esc(issue.detail)}</div>
+                </div>`;
+            list.appendChild(item);
+        }
+    } else {
+        issuesCard.classList.add('hidden');
+    }
+
+    // Fixes
+    const fixesCard = document.getElementById('fixes-card');
+    const fixableIssues = analysis.issues.filter(i => i.fix);
+    if (fixableIssues.length > 0) {
+        fixesCard.classList.remove('hidden');
+        const list = document.getElementById('fix-list');
+        list.innerHTML = '';
+        fixableIssues.forEach((issue, idx) => {
+            const item = document.createElement('div');
+            item.className = 'fix-item';
+            item.innerHTML = `
+                <div class="fix-num">${idx + 1}</div>
+                <div class="fix-body">
+                    <div class="fix-title" style="color:${sevColor(issue.severity)}">${esc(issue.title)}</div>
+                    <div class="fix-detail">${esc(issue.fix)}</div>
+                </div>`;
+            list.appendChild(item);
+        });
+    } else {
+        fixesCard.classList.add('hidden');
+    }
+
+    // Corrected record
+    const corrected = analysis.corrected;
+    _correctedRecord = corrected.record;
+
+    const correctedBox = document.getElementById('corrected-box');
+    if (corrected.changes.length === 0) {
+        correctedBox.textContent = corrected.record;
+    } else {
+        // Highlight changed tokens
+        const changeMap = new Map();
+        for (const c of corrected.changes) {
+            if (c.type === 'change') changeMap.set(c.to,   'tok-changed');
+            if (c.type === 'add')    changeMap.set(c.raw,  'tok-added');
+        }
+        const parts = corrected.record.split(/\s+/).map(tok => {
+            const cls = changeMap.get(tok);
+            if (cls) return `<span class="${cls}">${esc(tok)}</span>`;
+            return `<span class="tok-kept">${esc(tok)}</span>`;
+        });
+        correctedBox.innerHTML = parts.join(' ');
+    }
+
+    // Changes list
+    const changesList = document.getElementById('changes-list');
+    if (corrected.changes.length > 0) {
+        changesList.innerHTML = '';
+        for (const c of corrected.changes) {
+            const item = document.createElement('div');
+            item.className = 'change-item';
+            const dotCls = c.type === 'add' ? 'change-dot-add' : c.type === 'remove' ? 'change-dot-remove' : 'change-dot-change';
+            let text = '';
+            if (c.type === 'add')    text = `Added <code>${esc(c.raw)}</code> — ${esc(c.reason)}`;
+            if (c.type === 'remove') text = `Removed <code>${esc(c.raw)}</code> — ${esc(c.reason)}`;
+            if (c.type === 'change') text = `Changed <code>${esc(c.from)}</code> to <code>${esc(c.to)}</code> — ${esc(c.reason)}`;
+            item.innerHTML = `<span class="change-dot ${dotCls}"></span><span>${text}</span>`;
+            changesList.appendChild(item);
+        }
+    } else {
+        changesList.innerHTML = '<div class="change-item"><span class="change-dot change-dot-add"></span><span style="color:var(--good)">No changes needed — this record is already well formed.</span></div>';
+    }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function esc(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function sevColor(sev) {
+    return { critical: 'var(--bad)', high: '#ff8c32', medium: 'var(--warn)', low: 'var(--accent)' }[sev] || 'var(--text)';
+}
+
+// ─── Actions ──────────────────────────────────────────────────────────────────
+function runAnalysis() {
+    const input = document.getElementById('record-input').value.trim();
+    if (!input) return;
+    const analysis = analyzeSPF(input);
+    renderResults(analysis);
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function clearAll() {
+    document.getElementById('record-input').value = '';
+    document.getElementById('results').classList.add('hidden');
+}
+
+function copyRecord() {
+    if (!_correctedRecord) return;
+    navigator.clipboard.writeText(_correctedRecord).then(() => {
+        const btn = document.getElementById('copy-btn');
+        const confirm = document.getElementById('copy-confirm');
+        btn.textContent = 'Copied';
+        confirm.classList.remove('hidden');
+        setTimeout(() => {
+            btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy Record`;
+            confirm.classList.add('hidden');
+        }, 2000);
+    });
+}
+
+// Allow Enter key in textarea (Ctrl/Cmd+Enter to analyze)
+document.getElementById('record-input').addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runAnalysis();
+});
+
+// ─── URL param pre-population ─────────────────────────────────────────────────
+(function () {
+    const params = new URLSearchParams(window.location.search);
+    const rec = params.get('record');
+    if (rec) {
+        document.getElementById('record-input').value = rec;
+        runAnalysis();
+    }
+})();
+</script>
+<script>(function(){var b=document.getElementById("badge-btn"),p=document.getElementById("badge-popover");if(!b||!p)return;function c(){p.classList.remove("open")}b.addEventListener("click",function(e){e.stopPropagation();p.classList.toggle("open")});document.addEventListener("click",c);document.addEventListener("keydown",function(e){if(e.key==="Escape")c()});})();</script>
+</body>
+</html>

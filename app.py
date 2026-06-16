@@ -68,7 +68,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 templates = Jinja2Templates(directory="templates")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://ther3boot.com", "https://www.ther3boot.com"],
+    allow_origins=["https://mailflowsentinel.com", "https://www.mailflowsentinel.com"],
     allow_methods=["GET"],
     allow_headers=["*"],
 )
@@ -79,6 +79,21 @@ def extract_domain(value: str) -> str:
     if "@" in value:
         return value.split("@", 1)[1]
     return value
+
+
+# A valid DNS hostname: 1-253 chars, dot-separated labels of 1-63 chars,
+# no leading/trailing hyphen per label. Anchored, so embedded CRLF, spaces,
+# or other characters are rejected — this is what stops SMTP command
+# injection where `domain` is interpolated into RCPT TO / MAIL FROM.
+_DOMAIN_RE = re.compile(
+    r'^(?=.{1,253}$)'
+    r'(?!-)[a-z0-9-]{1,63}(?<!-)'
+    r'(?:\.(?!-)[a-z0-9-]{1,63}(?<!-))+$'
+)
+
+
+def is_valid_domain(domain: str) -> bool:
+    return bool(_DOMAIN_RE.match(domain))
 
 
 def get_mx(domain: str):
@@ -756,33 +771,21 @@ def calculate_score(spf, dmarc, spf_lookups, mta_sts_record, tls_rpt_record, dir
     return score, risk_level, score_label, findings
 
 
-def _probe_relay(domain: str) -> dict:
-    result = {"status": "Unknown", "reason": "", "mx_tested": [], "tls_versions": [], "banners": []}
+def _probe_fingerprint(domain: str) -> dict:
+    result = {"banners": [], "tls_versions": [], "mx_tested": []}
     try:
-        relay_url = f"{PROBE_BASE}/relay?domain={urllib.parse.quote(domain)}"
-        with urllib.request.urlopen(relay_url, timeout=8) as resp:
-            relay_data = json.loads(resp.read().decode())
-        result["status"] = relay_data.get("status", "Unknown")
-        result["reason"] = relay_data.get("reason", "")
-        result["mx_tested"] = relay_data.get("mx_tested", [])
-        for r in relay_data.get("results", []):
-            if r.get("tls_version"):
-                result["tls_versions"].append(r["tls_version"])
+        fp_url = f"{PROBE_BASE}/fingerprint?domain={urllib.parse.quote(domain)}"
+        with urllib.request.urlopen(fp_url, timeout=8) as resp:
+            data = json.loads(resp.read().decode())
+        result["mx_tested"] = data.get("mx_tested", [])
+        for r in data.get("results", []):
             if r.get("banner"):
                 result["banners"].append(r["banner"])
+            if r.get("tls_version"):
+                result["tls_versions"].append(r["tls_version"])
     except Exception:
-        result["status"] = "Unavailable"
-        result["reason"] = "Open relay check unavailable."
+        pass
     return result
-
-
-def _probe_subdomains(domain: str) -> dict:
-    try:
-        sub_url = f"{PROBE_BASE}/subdomains?domain={urllib.parse.quote(domain)}"
-        with urllib.request.urlopen(sub_url, timeout=8) as resp:
-            return json.loads(resp.read().decode())
-    except Exception:
-        return {"subdomains_found": 0, "open_relays_found": 0, "open_relay_hosts": [], "results": []}
 
 
 @app.get("/stats")
@@ -846,6 +849,8 @@ def shared_report(request: Request, report_id: str):
 async def analyze(request: Request, domain: str):
     original_input = domain
     domain = extract_domain(domain)
+    if not is_valid_domain(domain):
+        raise HTTPException(status_code=400, detail="Invalid domain")
 
     # Phase 1: all independent DNS lookups in parallel (6 TXT/MX + 15 DKIM selectors)
     mx, spf, dmarc, bimi_record, mta_sts_record, tls_rpt_record, dkim_results = await asyncio.gather(
@@ -862,44 +867,28 @@ async def analyze(request: Request, domain: str):
     dkim_present = any(item["found"] for item in dkim_results)
     msft_dkim = detect_msft_dkim(dkim_results)
 
-    # Phase 2: all slow I/O in parallel (SPF recursion, MTA-STS fetch, 5 probe calls, ESP detection)
+    # Phase 2: all slow I/O in parallel (SPF recursion, MTA-STS fetch, probe calls, ESP detection)
     (
         spf_lookups,
         mta_sts_policy,
         direct_send,
         catch_all,
         email_senders,
-        open_relay,
-        subdomain_data,
+        fingerprint_data,
     ) = await asyncio.gather(
         asyncio.to_thread(count_spf_lookups, spf),
         asyncio.to_thread(check_mta_sts_policy, domain),
         asyncio.to_thread(evaluate_direct_send, domain, vendor, mx, dmarc, msft_dkim),
         asyncio.to_thread(evaluate_catch_all, domain),
         detect_email_senders(domain, spf),
-        asyncio.to_thread(_probe_relay, domain),
-        asyncio.to_thread(_probe_subdomains, domain),
+        asyncio.to_thread(_probe_fingerprint, domain),
     )
 
-    # Infer DKIM signing authority after Phase 2 so email_senders CNAME signals are available
-    dkim_signing_authority = infer_dkim_signing_authority(vendor, dkim_results, msft_dkim, email_senders)
-
-    recommended_fixes = generate_recommendations(
-        spf, dmarc, mta_sts_record, tls_rpt_record,
-        direct_send, catch_all, msft_dkim, vendor, dkim_results,
-    )
-
-    if open_relay["status"] == "Open Relay":
-        recommended_fixes.insert(0, "CRITICAL: Open relay detected — your mail server will forward email for anyone. Restrict relay immediately.")
-
-    if subdomain_data.get("open_relays_found", 0) > 0:
-        recommended_fixes.insert(0, f"CRITICAL: Open relay detected on mail subdomain(s): {', '.join(subdomain_data['open_relay_hosts'])}. Restrict relay immediately.")
-
-    # Build mail server fingerprint from open relay probe data
+    # Build mail server fingerprint from the passive banner-grab probe
     fingerprint = {
-        "banners": open_relay.get("banners", []),
-        "tls_versions": open_relay.get("tls_versions", []),
-        "mx_hosts": open_relay.get("mx_tested", []),
+        "banners": fingerprint_data.get("banners", []),
+        "tls_versions": fingerprint_data.get("tls_versions", []),
+        "mx_hosts": fingerprint_data.get("mx_tested", []),
         "vendor": vendor,
     }
     fingerprint["server_software"] = ""
@@ -909,6 +898,14 @@ async def analyze(request: Request, domain: str):
         if match:
             fingerprint["server_software"] = match.group(1)
     fingerprint["tls_secure"] = all("TLSv1.2" in t or "TLSv1.3" in t for t in fingerprint["tls_versions"]) if fingerprint["tls_versions"] else None
+
+    # Infer DKIM signing authority after Phase 2 so email_senders CNAME signals are available
+    dkim_signing_authority = infer_dkim_signing_authority(vendor, dkim_results, msft_dkim, email_senders)
+
+    recommended_fixes = generate_recommendations(
+        spf, dmarc, mta_sts_record, tls_rpt_record,
+        direct_send, catch_all, msft_dkim, vendor, dkim_results,
+    )
 
     score, risk_level, score_label, findings = calculate_score(
         spf, dmarc, spf_lookups, mta_sts_record,
@@ -939,11 +936,9 @@ async def analyze(request: Request, domain: str):
         "email_senders": email_senders, "recommended_fixes": recommended_fixes,
         "score": score, "risk_level": risk_level, "score_label": score_label,
         "findings": findings, "score_summary": score_summary,
-        "report_date": report_date, "open_relay": open_relay,
-        "fingerprint": fingerprint, "subdomain_data": subdomain_data,
+        "report_date": report_date, "fingerprint": fingerprint,
     }
     _slim = {**share_data}
-    _slim["subdomain_data"] = {k: v for k, v in share_data["subdomain_data"].items() if k != "results"}
     _slim["mta_sts_policy"] = {k: v for k, v in share_data["mta_sts_policy"].items() if k != "body"}
     scan_data_json = json.dumps(_slim).replace("</", r"<\/")
 
@@ -979,9 +974,7 @@ async def analyze(request: Request, domain: str):
             "findings": findings,
             "score_summary": score_summary,
             "report_date": report_date,
-            "open_relay": open_relay,
             "fingerprint": fingerprint,
-            "subdomain_data": subdomain_data,
             "scan_data_json": scan_data_json,
         }
     )
@@ -997,29 +990,65 @@ _SUSPICIOUS_TLDS = {
 _GSAFE_URL = 'https://safebrowsing.googleapis.com/v4/threatMatches:find'
 
 
+def _is_blocked_ip(ip_obj) -> bool:
+    """Any address we must never let the scanner reach (SSRF guard)."""
+    return (
+        ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local
+        or ip_obj.is_reserved or ip_obj.is_multicast or ip_obj.is_unspecified
+    )
+
+
 def _is_private_host(hostname: str) -> bool:
-    hostname = hostname.split(':')[0]
+    """
+    True if the host is unsafe to fetch. Fails CLOSED: a literal IP in any
+    disallowed range, a name that resolves to *any* such IP (across all A/AAAA
+    records), or a name that cannot be resolved at all is treated as blocked.
+    """
+    hostname = hostname.strip().strip('[]')  # tolerate IPv6 brackets
+    # Literal IP — check directly, no DNS.
     try:
-        return _ipaddress.ip_address(hostname).is_private
+        return _is_blocked_ip(_ipaddress.ip_address(hostname))
     except ValueError:
         pass
+    # Hostname — resolve every address it maps to; block if ANY is unsafe.
     try:
-        ip = _socket.gethostbyname(hostname)
-        a = _ipaddress.ip_address(ip)
-        return a.is_private or a.is_loopback or a.is_link_local
+        infos = _socket.getaddrinfo(hostname, None)
     except Exception:
-        return False
+        return True  # unresolvable → fail closed
+    saw_address = False
+    for info in infos:
+        ip_str = info[4][0].split('%')[0]  # drop IPv6 zone id
+        try:
+            ip_obj = _ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue
+        saw_address = True
+        if _is_blocked_ip(ip_obj):
+            return True
+    return not saw_address  # no usable address → fail closed
 
 
 def _follow_redirects(url: str, max_hops: int = 10) -> list[dict]:
     chain: list[dict] = []
     current = url
     seen: set[str] = set()
-    headers = {'User-Agent': 'Mozilla/5.0 (compatible; ther3boot-URLScanner/1.0)'}
+    headers = {'User-Agent': 'Mozilla/5.0 (compatible; mailflowsentinel-URLScanner/1.0)'}
     for _ in range(max_hops):
         if current in seen:
             break
         seen.add(current)
+
+        # SSRF guard: re-validate scheme and host of EVERY hop, including
+        # redirect targets, before issuing the request. The initial check in
+        # scan_url_route only covers hop 0; a 30x Location can point anywhere.
+        p = urllib.parse.urlparse(current)
+        if p.scheme not in ('http', 'https'):
+            chain.append({'url': current, 'status_code': None, 'error': 'Blocked: non-HTTP redirect scheme'})
+            break
+        if not p.hostname or _is_private_host(p.hostname):
+            chain.append({'url': current, 'status_code': None, 'error': 'Blocked: private or internal address'})
+            break
+
         try:
             r = _req.get(current, headers=headers, allow_redirects=False, timeout=8, verify=False)
             hop: dict = {'url': current, 'status_code': r.status_code, 'error': None}
@@ -1106,7 +1135,7 @@ def _check_safe_browsing(url: str) -> dict:
     if not key:
         return {'status': 'not_configured', 'threats': []}
     payload = json.dumps({
-        'client': {'clientId': 'ther3boot-urlscanner', 'clientVersion': '1.0'},
+        'client': {'clientId': 'mailflowsentinel-urlscanner', 'clientVersion': '1.0'},
         'threatInfo': {
             'threatTypes': ['MALWARE', 'SOCIAL_ENGINEERING', 'UNWANTED_SOFTWARE', 'POTENTIALLY_HARMFUL_APPLICATION'],
             'platformTypes': ['ANY_PLATFORM'],
@@ -1206,8 +1235,10 @@ async def scan_url_route(request: Request, url: str):
     parsed = urllib.parse.urlparse(url)
     if not parsed.netloc:
         raise HTTPException(status_code=400, detail='Invalid URL')
-    hostname = parsed.netloc.split(':')[0]
-    if _is_private_host(hostname):
+    # Use .hostname (not netloc.split) so embedded userinfo like
+    # http://anything@169.254.169.254/ can't smuggle past the SSRF check.
+    hostname = parsed.hostname or ''
+    if not hostname or _is_private_host(hostname):
         raise HTTPException(status_code=400, detail='Scanning private addresses is not allowed')
 
     chain, ssl_info, whois_info, gsb = await asyncio.gather(
