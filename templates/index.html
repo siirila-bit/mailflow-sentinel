@@ -948,14 +948,6 @@
                             {% else %}
                                 <span class="badge badge-warn"><span class="dot"></span>Direct Send</span>
                             {% endif %}
-
-                            {% if open_relay.status == "Open Relay" %}
-                                <span class="badge badge-bad"><span class="dot"></span>Open Relay</span>
-                            {% elif open_relay.status == "Not Open Relay" %}
-                                <span class="badge badge-good"><span class="dot"></span>No Relay</span>
-                            {% else %}
-                                <span class="badge badge-warn"><span class="dot"></span>Relay Unknown</span>
-                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -1354,76 +1346,6 @@
             </div>
 
             <div class="section-card">
-                <h3 class="section-title">Open Relay Test</h3>
-                <p class="section-sub">An open relay accepts and forwards email from anyone to anyone without authentication — enabling spam, phishing, and CEO impersonation attacks using your own infrastructure.</p>
-                <div class="record-box">
-                    <div style="margin-bottom: 14px;">
-                        <strong>Status:</strong>
-                        {% if open_relay.status == "Open Relay" %}
-                            <span class="badge badge-bad">Open Relay Detected</span>
-                        {% elif open_relay.status == "Not Open Relay" %}
-                            <span class="badge badge-good">Not Open Relay</span>
-                        {% elif open_relay.status == "Unavailable" %}
-                            <span class="badge badge-warn">Check Unavailable</span>
-                        {% else %}
-                            <span class="badge badge-warn">Unknown</span>
-                        {% endif %}
-                    </div>
-                    <div class="muted" style="margin-bottom: 12px;">{{ open_relay.reason }}</div>
-                    {% if open_relay.mx_tested %}
-                    <div style="margin-bottom: 10px;">
-                        <strong>MX Hosts Tested:</strong>
-                        <div class="muted" style="margin-top: 6px;">
-                            {% for mx in open_relay.mx_tested %}
-                                <div><code>{{ mx }}</code></div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-
-            <div class="section-card">
-                <h3 class="section-title">Mail Subdomain Scan</h3>
-                <p class="section-sub">Checks common mail-related subdomains (mail., smtp., webmail., mx., relay.) for active SMTP servers. Forgotten subdomains are often left misconfigured and open to relay abuse.</p>
-                {% if subdomain_data.subdomains_found > 0 %}
-                <div class="record-box">
-                    <div style="margin-bottom: 14px;">
-                        <strong>Subdomains Found:</strong> {{ subdomain_data.subdomains_found }}
-                        {% if subdomain_data.open_relays_found > 0 %}
-                            <span class="badge badge-bad" style="margin-left: 10px;">{{ subdomain_data.open_relays_found }} Open Relay{% if subdomain_data.open_relays_found > 1 %}s{% endif %}</span>
-                        {% else %}
-                            <span class="badge badge-good" style="margin-left: 10px;">No Open Relays</span>
-                        {% endif %}
-                    </div>
-                    {% for sub in subdomain_data.results %}
-                    <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.06);">
-                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px;">
-                            <code style="color: #93c5fd;">{{ sub.subdomain }}</code>
-                            {% if sub.open_relay %}
-                                <span class="finding-bad">Open Relay</span>
-                            {% elif sub.smtp_open %}
-                                <span class="finding-good">SMTP Active</span>
-                            {% endif %}
-                            {% if sub.tls_version %}
-                                <span class="finding-good" style="font-size:11px;">{{ sub.tls_version }}</span>
-                            {% endif %}
-                        </div>
-                        {% if sub.banner %}
-                        <div class="muted" style="font-size: 12px;"><code>{{ sub.banner[:100] }}</code></div>
-                        {% endif %}
-                    </div>
-                    {% endfor %}
-                </div>
-                {% else %}
-                <div class="record-box">
-                    <span class="finding-good">No common mail subdomains found.</span>
-                    <div class="muted" style="margin-top: 8px;">Checked: mail, smtp, webmail, mx, mx1, mx2, relay, mailhost, exchange</div>
-                </div>
-                {% endif %}
-            </div>
-
-            <div class="section-card">
                 <h3 class="section-title">Recommended Fixes</h3>
                 <p class="section-sub">Suggested next steps based on the current posture.</p>
                 {% if recommended_fixes %}
@@ -1449,7 +1371,7 @@
                         <a id="dmarc-fix-btn" href="#" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;background:rgba(39,194,129,0.1);border:1px solid rgba(39,194,129,0.25);color:#27c281;font-weight:600;font-size:13px;text-decoration:none;transition:background 0.15s;" onmouseover="this.style.background='rgba(39,194,129,0.18)'" onmouseout="this.style.background='rgba(39,194,129,0.1)'">Analyze &amp; Fix DMARC &#8594;</a>
                     </div>
                     <div id="dkim-fix-wrapper" style="display:none;">
-                        <a id="dkim-fix-btn" href="https://ther3boot.com/dkim-analyzer.html" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.25);color:#7c5cff;font-weight:600;font-size:13px;text-decoration:none;transition:background 0.15s;" onmouseover="this.style.background='rgba(124,92,255,0.18)'" onmouseout="this.style.background='rgba(124,92,255,0.1)'">Analyze &amp; Fix DKIM &#8594;</a>
+                        <a id="dkim-fix-btn" href="https://mailflowsentinel.com/dkim-analyzer.html" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.25);color:#7c5cff;font-weight:600;font-size:13px;text-decoration:none;transition:background 0.15s;" onmouseover="this.style.background='rgba(124,92,255,0.18)'" onmouseout="this.style.background='rgba(124,92,255,0.1)'">Analyze &amp; Fix DKIM &#8594;</a>
                     </div>
                 </div>
             </div>
@@ -1610,7 +1532,7 @@ Analyzed by mailflowsentinel.com
                     var btn = document.getElementById('spf-fix-btn');
                     var wrap = document.getElementById('spf-fix-wrapper');
                     if (btn && wrap) {
-                        btn.href = 'https://ther3boot.com/spf-fix.html?record=' + encodeURIComponent(d.spf);
+                        btn.href = 'https://mailflowsentinel.com/spf-fix.html?record=' + encodeURIComponent(d.spf);
                         wrap.style.display = '';
                     }
                 }
@@ -1618,7 +1540,7 @@ Analyzed by mailflowsentinel.com
                     var dmarcBtn = document.getElementById('dmarc-fix-btn');
                     var dmarcWrap = document.getElementById('dmarc-fix-wrapper');
                     if (dmarcBtn && dmarcWrap) {
-                        dmarcBtn.href = 'https://ther3boot.com/dmarc-analyzer.html?record=' + encodeURIComponent(d.dmarc);
+                        dmarcBtn.href = 'https://mailflowsentinel.com/dmarc-analyzer.html?record=' + encodeURIComponent(d.dmarc);
                         dmarcWrap.style.display = '';
                     }
                 }
@@ -1633,7 +1555,7 @@ Analyzed by mailflowsentinel.com
     </script>
 
     <div style="text-align: center; padding: 20px 0 40px; color: rgba(149,163,191,0.4); font-size: 13px; font-family: Inter, sans-serif;">
-        Reboot Labs &nbsp;&middot;&nbsp; R. Siirila &nbsp;&middot;&nbsp; <a href="https://mailflowsentinel.com" style="color: rgba(90,169,255,0.4); text-decoration: none;">mailflowsentinel.com</a> &nbsp;&middot;&nbsp; <a href="/checklist" style="color: rgba(90,169,255,0.4); text-decoration: none;">M365 Checklist</a> &nbsp;&middot;&nbsp; <a href="https://ther3boot.com/spf-fix.html" style="color: rgba(90,169,255,0.4); text-decoration: none;">SPF Analyzer</a> &nbsp;&middot;&nbsp; <a href="https://ther3boot.com/dmarc-analyzer.html" style="color: rgba(90,169,255,0.4); text-decoration: none;">DMARC Analyzer</a> &nbsp;&middot;&nbsp; <a href="https://ther3boot.com/email-header-analyzer.html" style="color: rgba(90,169,255,0.4); text-decoration: none;">Header Analyzer</a>
+        Reboot Labs &nbsp;&middot;&nbsp; R. Siirila &nbsp;&middot;&nbsp; <a href="https://mailflowsentinel.com" style="color: rgba(90,169,255,0.4); text-decoration: none;">mailflowsentinel.com</a> &nbsp;&middot;&nbsp; <a href="/checklist" style="color: rgba(90,169,255,0.4); text-decoration: none;">M365 Checklist</a> &nbsp;&middot;&nbsp; <a href="https://mailflowsentinel.com/spf-fix.html" style="color: rgba(90,169,255,0.4); text-decoration: none;">SPF Analyzer</a> &nbsp;&middot;&nbsp; <a href="https://mailflowsentinel.com/dmarc-analyzer.html" style="color: rgba(90,169,255,0.4); text-decoration: none;">DMARC Analyzer</a> &nbsp;&middot;&nbsp; <a href="https://mailflowsentinel.com/email-header-analyzer.html" style="color: rgba(90,169,255,0.4); text-decoration: none;">Header Analyzer</a>
     </div>
 
 
