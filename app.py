@@ -805,6 +805,11 @@ def robots():
     return FileResponse("/opt/mailflow/robots.txt")
 
 
+@app.get("/sitemap.xml")
+def sitemap():
+    return FileResponse("/opt/mailflow/sitemap.xml", media_type="application/xml")
+
+
 @app.get("/")
 def home(request: Request):
     return templates.TemplateResponse(request=request, name="index.html", context={})

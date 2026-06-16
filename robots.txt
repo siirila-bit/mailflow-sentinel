@@ -1,4 +1,7 @@
 User-agent: *
 Disallow: /analyze
+Disallow: /r/
 Allow: /
+
+Sitemap: https://mailflowsentinel.com/sitemap.xml
 

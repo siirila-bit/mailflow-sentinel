@@ -3,7 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DMARC Record Analyzer — Reboot Labs</title>
+    <title>DMARC Record Analyzer — MailFlow Sentinel by Reboot Labs</title>
+    <meta name="description" content="Free DMARC record analyzer. Parse and validate your DMARC policy — p, sp, pct, rua/ruf and alignment — with hardening recommendations per RFC 7489.">
+    <link rel="canonical" href="https://mailflowsentinel.com/dmarc-analyzer.html">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="DMARC Record Analyzer — MailFlow Sentinel by Reboot Labs">
+    <meta property="og:description" content="Free DMARC record analyzer — validate p/sp/pct/rua and alignment, with hardening recommendations.">
+    <meta property="og:url" content="https://mailflowsentinel.com/dmarc-analyzer.html">
+    <meta name="twitter:card" content="summary">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230b1020'/><path d='M4 10l12 9 12-9' stroke='%235aa9ff' stroke-width='2' fill='none' stroke-linecap='round'/><rect x='4' y='10' width='24' height='16' rx='2' stroke='%235aa9ff' stroke-width='2' fill='none'/></svg>">
     <style>
         :root {
@@ -483,6 +490,17 @@ function analyzeDMARC(record) {
             title: 'Policy is p=quarantine — failing mail goes to spam, not rejected',
             detail: 'Quarantine sends DMARC-failing messages to the spam/junk folder. It is better than none, but still allows spoofed mail to reach recipients. p=reject is the only policy that fully blocks unauthorized senders.',
             fix: 'Advance to p=reject once you have confirmed all legitimate senders are covered',
+        });
+    }
+
+    // p= must be the second tag (immediately after v=) per RFC 7489
+    if (tags['p'] && tagOrder.length > 1 && tagOrder[1].key !== 'p') {
+        score -= 5;
+        issues.push({
+            severity: 'medium',
+            title: 'p= is not the second tag — some receivers may ignore the policy',
+            detail: 'RFC 7489 requires the p= tag to appear immediately after v=DMARC1. When p= appears later in the record, some receivers treat the policy as undefined and apply no enforcement.',
+            fix: 'Reorder the record so p= is the first tag after v=DMARC1',
         });
     }
 

@@ -3,7 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SPF Record Analyzer — MailFlow Sentinel</title>
+    <title>SPF Record Analyzer — MailFlow Sentinel by Reboot Labs</title>
+    <meta name="description" content="Free SPF record analyzer and fixer. Check your SPF for the RFC 7208 ten-lookup limit and the +all/~all/-all qualifier, and get plain-English fix recommendations.">
+    <link rel="canonical" href="https://mailflowsentinel.com/spf-fix.html">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="SPF Record Analyzer — MailFlow Sentinel by Reboot Labs">
+    <meta property="og:description" content="Free SPF record analyzer and fixer — check the 10-lookup limit and qualifiers, with fix recommendations.">
+    <meta property="og:url" content="https://mailflowsentinel.com/spf-fix.html">
+    <meta name="twitter:card" content="summary">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230b1020'/><path d='M4 10l12 9 12-9' stroke='%235aa9ff' stroke-width='2' fill='none' stroke-linecap='round'/><rect x='4' y='10' width='24' height='16' rx='2' stroke='%235aa9ff' stroke-width='2' fill='none'/></svg>">
     <style>
         :root {
@@ -518,8 +525,15 @@ function parseToken(raw) {
         mechanism = rest.slice(0, eqIdx).toLowerCase();
         value     = rest.slice(eqIdx + 1);
     } else {
-        mechanism = lower;
-        value     = '';
+        // bare mechanism, possibly with a dual-CIDR suffix (a/24, mx//64, a/24//64)
+        const slashIdx = lower.indexOf('/');
+        if (slashIdx !== -1) {
+            mechanism = lower.slice(0, slashIdx);
+            value     = rest.slice(slashIdx);
+        } else {
+            mechanism = lower;
+            value     = '';
+        }
     }
     return { raw, qualifier, mechanism, value };
 }
