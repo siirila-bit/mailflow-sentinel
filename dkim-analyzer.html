@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DKIM Record Analyzer — Reboot Labs</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230b1020'/><path d='M4 10l12 9 12-9' stroke='%235aa9ff' stroke-width='2' fill='none' stroke-linecap='round'/><rect x='4' y='10' width='24' height='16' rx='2' stroke='%235aa9ff' stroke-width='2' fill='none'/></svg>">
+    <style>
+        :root {
+            --bg: #0b1020;
+            --panel: rgba(18, 25, 45, 0.78);
+            --text: #e8edf7;
+            --muted: #95a3bf;
+            --border: rgba(255,255,255,0.08);
+            --accent: #5aa9ff;
+            --accent-2: #7c5cff;
+            --good: #27c281;
+            --warn: #f0b34a;
+            --bad: #ff6b6b;
+            --shadow: 0 18px 50px rgba(0,0,0,0.35);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(90,169,255,0.14), transparent 28%),
+                radial-gradient(circle at top right, rgba(124,92,255,0.14), transparent 30%),
+                linear-gradient(180deg, #09101c 0%, #0b1020 100%);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        .wrap { max-width: 860px; margin: 0 auto; padding: 48px 24px 80px; }
+
+        .topbar {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 44px;
+        }
+        .topbar a {
+            display: inline-flex; align-items: center; gap: 7px;
+            font-size: 13px; font-weight: 600; color: var(--muted);
+            text-decoration: none; transition: color 0.15s;
+        }
+        .topbar a:hover { color: var(--accent); }
+        .topbar-badge {
+            font-size: 13px; font-weight: 600; color: var(--accent);
+            padding: 6px 14px; border-radius: 8px;
+            border: 1px solid rgba(90,169,255,0.3);
+            background: rgba(90,169,255,0.06);
+        }
+
+        .hero-title {
+            font-size: 38px; font-weight: 800; letter-spacing: -0.03em;
+            line-height: 1.08; margin-bottom: 10px;
+        }
+        .hero-title span {
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hero-sub {
+            font-size: 16px; color: var(--muted); line-height: 1.55;
+            margin-bottom: 36px; max-width: 620px;
+        }
+
+        .card {
+            background: var(--panel);
+            backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            border-radius: 20px; padding: 26px 30px; margin-bottom: 18px;
+        }
+        .card-title {
+            font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--accent); margin-bottom: 18px;
+        }
+
+        .input-row {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 4px;
+        }
+        @media (max-width: 540px) { .input-row { grid-template-columns: 1fr; } }
+
+        .input-group { display: flex; flex-direction: column; gap: 6px; }
+        .input-label { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+        .text-input {
+            width: 100%; padding: 11px 14px;
+            background: rgba(10,15,30,0.7); border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 12px; font-family: inherit;
+            font-size: 14px; color: var(--text); outline: none;
+            transition: border-color 0.2s;
+        }
+        .text-input:focus { border-color: rgba(90,169,255,0.45); }
+        .text-input::placeholder { color: rgba(149,163,191,0.4); }
+
+        .selector-chips-label {
+            font-size: 11px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.07em; color: var(--muted); margin: 16px 0 8px;
+        }
+        .chips-row { display: flex; flex-wrap: wrap; gap: 7px; }
+        .chip {
+            font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 7px;
+            border: 1px solid var(--border); background: rgba(255,255,255,0.04);
+            color: var(--muted); cursor: pointer; transition: all 0.15s;
+            font-family: "JetBrains Mono", "Fira Code", Menlo, monospace;
+        }
+        .chip:hover { border-color: rgba(90,169,255,0.3); color: var(--accent); background: rgba(90,169,255,0.06); }
+
+        .btn-row { display: flex; gap: 10px; margin-top: 16px; }
+        .btn-analyze {
+            padding: 11px 24px; border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            color: #fff; font-weight: 700; font-size: 14px;
+            border: none; cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+            font-family: inherit; display: inline-flex; align-items: center; gap: 8px;
+        }
+        .btn-analyze:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+        .btn-analyze:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-clear {
+            padding: 11px 18px; border-radius: 10px;
+            background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+            color: var(--muted); font-weight: 600; font-size: 14px;
+            cursor: pointer; transition: background 0.15s; font-family: inherit;
+        }
+        .btn-clear:hover { background: rgba(255,255,255,0.1); }
+
+        .error-bar {
+            margin-top: 14px; padding: 12px 16px; border-radius: 10px;
+            background: rgba(255,107,107,0.1); border: 1px solid rgba(255,107,107,0.25);
+            color: #ff6b6b; font-size: 13px; font-weight: 500; line-height: 1.5;
+        }
+
+        /* ── Explainer ─────────────────────────────────────────────────────── */
+        .explainer {
+            background: rgba(10,15,30,0.5); border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 16px; padding: 20px 24px; margin-bottom: 18px;
+        }
+        .explainer-title {
+            font-size: 13px; font-weight: 700; color: var(--muted);
+            text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 14px;
+        }
+        .explainer-body { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 580px) { .explainer-body { grid-template-columns: 1fr; } }
+        .explainer-step { display: flex; gap: 12px; align-items: flex-start; }
+        .explainer-num {
+            flex-shrink: 0; width: 24px; height: 24px; border-radius: 7px;
+            background: rgba(90,169,255,0.12); border: 1px solid rgba(90,169,255,0.22);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: 800; color: var(--accent);
+        }
+        .explainer-text { font-size: 13px; color: var(--muted); line-height: 1.55; }
+        .explainer-text strong { color: var(--text); font-weight: 600; }
+
+        /* ── Score row ─────────────────────────────────────────────────────── */
+        .score-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+        @media (max-width: 560px) { .score-row { grid-template-columns: 1fr 1fr; } }
+        .score-card {
+            background: var(--panel); backdrop-filter: blur(14px);
+            border: 1px solid var(--border); box-shadow: var(--shadow);
+            border-radius: 20px; padding: 22px 24px; text-align: center;
+        }
+        .score-num {
+            font-size: 52px; font-weight: 900; line-height: 1;
+            letter-spacing: -0.04em; margin-bottom: 6px;
+        }
+        .score-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+        .score-sublabel { font-size: 14px; font-weight: 600; margin-top: 4px; }
+
+        /* ── Verdict bar ───────────────────────────────────────────────────── */
+        .verdict-bar {
+            font-size: 15px; font-weight: 500; line-height: 1.6;
+            padding: 16px 20px 16px 22px;
+            background: var(--panel); backdrop-filter: blur(14px);
+            border: 1px solid var(--border); border-left: 3px solid var(--muted);
+            border-radius: 14px; margin-bottom: 18px; color: var(--text);
+        }
+
+        /* ── DNS lookup display ────────────────────────────────────────────── */
+        .mono-box {
+            background: rgba(10,15,30,0.7); border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px; padding: 14px 18px;
+            font-family: "JetBrains Mono", "Fira Code", Menlo, monospace;
+            font-size: 13px; color: var(--text); line-height: 1.7;
+            word-break: break-all;
+        }
+        .mono-box .cmd-label {
+            font-size: 10px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.08em; color: var(--muted); margin-bottom: 4px;
+        }
+        .mono-box .cmd-line { color: #27c281; }
+        .mono-box .cmd-comment { color: rgba(149,163,191,0.5); }
+        .dns-name { color: var(--accent); font-weight: 600; }
+
+        /* ── Raw record ────────────────────────────────────────────────────── */
+        .raw-box {
+            background: rgba(10,15,30,0.7); border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px; padding: 14px 18px;
+            font-family: "JetBrains Mono", "Fira Code", Menlo, monospace;
+            font-size: 13px; color: var(--text); line-height: 1.6;
+            word-break: break-all; white-space: pre-wrap;
+        }
+
+        /* ── Tag breakdown ─────────────────────────────────────────────────── */
+        .badge {
+            display: inline-block; padding: 2px 9px; border-radius: 5px;
+            font-size: 10px; font-weight: 700; letter-spacing: 0.07em;
+            text-transform: uppercase;
+        }
+        .badge-critical { background: rgba(255,107,107,0.18); color: #ff6b6b; border: 1px solid rgba(255,107,107,0.3); }
+        .badge-high     { background: rgba(255,140,50,0.18);  color: #ff8c32; border: 1px solid rgba(255,140,50,0.3); }
+        .badge-medium   { background: rgba(240,179,74,0.18);  color: #f0b34a; border: 1px solid rgba(240,179,74,0.25); }
+        .badge-low      { background: rgba(90,169,255,0.14);  color: #5aa9ff; border: 1px solid rgba(90,169,255,0.25); }
+        .badge-good     { background: rgba(39,194,129,0.14);  color: #27c281; border: 1px solid rgba(39,194,129,0.25); }
+        .badge-info     { background: rgba(149,163,191,0.12); color: #95a3bf; border: 1px solid rgba(149,163,191,0.2); }
+
+        .token-list { display: flex; flex-direction: column; gap: 10px; }
+        .token-item {
+            display: grid; grid-template-columns: minmax(0,200px) 1fr;
+            align-items: start; gap: 14px;
+            background: rgba(10,15,30,0.5); border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 12px; padding: 12px 16px;
+        }
+        @media (max-width: 580px) { .token-item { grid-template-columns: 1fr; } }
+        .token-raw {
+            font-family: "JetBrains Mono", "Fira Code", Menlo, monospace;
+            font-size: 12px; font-weight: 600;
+            padding: 4px 10px; border-radius: 6px;
+            white-space: normal; word-break: break-all; align-self: start;
+        }
+        .token-body { min-width: 0; overflow-wrap: break-word; }
+        .token-mech { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 3px; }
+        .token-desc { font-size: 13px; color: var(--muted); line-height: 1.5; }
+        .token-note {
+            margin-top: 6px; font-size: 12px; padding: 5px 10px; border-radius: 7px;
+            background: rgba(90,169,255,0.06); border: 1px solid rgba(90,169,255,0.12);
+            color: var(--accent); display: inline-block;
+        }
+
+        .tok-version  { background: rgba(149,163,191,0.1); color: var(--muted);   border: 1px solid rgba(149,163,191,0.2); }
+        .tok-good     { background: rgba(39,194,129,0.1);  color: #27c281;        border: 1px solid rgba(39,194,129,0.2); }
+        .tok-warn     { background: rgba(240,179,74,0.12); color: #f0b34a;        border: 1px solid rgba(240,179,74,0.25); }
+        .tok-bad      { background: rgba(255,107,107,0.12); color: #ff6b6b;       border: 1px solid rgba(255,107,107,0.25); }
+        .tok-neutral  { background: rgba(90,169,255,0.1);  color: var(--accent);  border: 1px solid rgba(90,169,255,0.2); }
+        .tok-critical { background: rgba(255,107,107,0.22); color: #ff6b6b;       border: 1px solid rgba(255,107,107,0.45); }
+        .tok-missing  { background: rgba(149,163,191,0.06); color: rgba(149,163,191,0.5); border: 1px solid rgba(149,163,191,0.12); font-style: italic; }
+
+        /* ── Issues ────────────────────────────────────────────────────────── */
+        .issue-list { display: flex; flex-direction: column; gap: 12px; }
+        .issue-item { display: flex; gap: 12px; align-items: flex-start; }
+        .issue-body { min-width: 0; }
+        .issue-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+        .issue-detail { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+        /* ── CTA ───────────────────────────────────────────────────────────── */
+        .cta-card {
+            background: linear-gradient(135deg, rgba(90,169,255,0.08), rgba(124,92,255,0.08));
+            border: 1px solid rgba(90,169,255,0.18);
+        }
+        .cta-card p { font-size: 15px; color: var(--muted); line-height: 1.6; margin-bottom: 18px; }
+        .cta-link {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 12px 22px; border-radius: 12px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            color: #fff; font-weight: 700; font-size: 14px;
+            text-decoration: none; transition: opacity 0.2s, transform 0.1s;
+            box-shadow: 0 8px 22px rgba(92,122,255,0.28);
+        }
+        .cta-link:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        code {
+            font-family: "JetBrains Mono", Menlo, monospace;
+            font-size: 12px; background: rgba(90,169,255,0.08);
+            border: 1px solid rgba(90,169,255,0.15); border-radius: 4px;
+            padding: 1px 6px; color: var(--accent);
+        }
+
+        .hidden { display: none !important; }
+
+        .spinner {
+            width: 16px; height: 16px; border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            animation: spin 0.6s linear infinite; display: inline-block;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .footer { text-align: center; padding: 28px 0 0; color: rgba(149,163,191,0.35); font-size: 12px; }
+        .footer a { color: rgba(90,169,255,0.4); text-decoration: none; }
+        .footer a:hover { color: rgba(90,169,255,0.7); }
+    
+        /* ── Badge popover ──────────────────────────────────────────────── */
+        .badge-wrap { position: relative; }
+        .topbar-badge { cursor: pointer; user-select: none; }
+        .badge-popover {
+            position: absolute; top: calc(100% + 10px); right: 0;
+            width: 260px;
+            background: rgba(11, 17, 35, 0.98);
+            border: 1px solid rgba(90,169,255,0.22);
+            border-radius: 12px; padding: 14px 16px;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.55);
+            z-index: 200; display: none;
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        }
+        .badge-popover.open { display: block; }
+        .badge-popover-text {
+            font-size: 13px; color: var(--muted); line-height: 1.55;
+            margin: 0 0 12px;
+        }
+        .badge-popover-link {
+            display: inline-flex; align-items: center; gap: 5px;
+            font-size: 12px; font-weight: 700; color: var(--accent);
+            text-decoration: none;
+        }
+        .badge-popover-link svg { transition: transform 0.15s; }
+        .badge-popover-link:hover svg { transform: translateX(2px); }
+    </style>
+</head>
+<body>
+<div class="wrap">
+
+    <div class="topbar">
+        <a href="https://mailflowsentinel.com">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            mailflowsentinel.com
+        </a>
+        <div class="badge-wrap">
+        <span class="topbar-badge" id="badge-btn">DKIM Analyzer</span>
+        <div class="badge-popover" id="badge-popover">
+            <p class="badge-popover-text">Look up a domain's DKIM public key by selector, check key strength, detect revoked or weak keys, and get a plain English breakdown of every tag.</p>        </div>
+    </div>
+    </div>
+
+    <h1 class="hero-title"><span>DKIM</span> Record Analyzer</h1>
+    <p class="hero-sub">DomainKeys Identified Mail (DKIM) lets receiving servers verify that email was authorized by the sending domain. Enter a domain and selector to look up the public key, detect weaknesses, and get a plain English breakdown of every field.</p>
+
+    <div class="explainer" style="margin-bottom:22px;">
+        <div class="explainer-title">How DKIM Works</div>
+        <div class="explainer-body">
+            <div class="explainer-step">
+                <div class="explainer-num">1</div>
+                <div class="explainer-text"><strong>Sender signs the email.</strong> The sending mail server uses a private key to create a cryptographic signature and adds it to the email header as <code>DKIM-Signature:</code>.</div>
+            </div>
+            <div class="explainer-step">
+                <div class="explainer-num">2</div>
+                <div class="explainer-text"><strong>Key is published in DNS.</strong> The domain owner publishes the matching public key as a TXT record at <code>{selector}._domainkey.{domain}</code>.</div>
+            </div>
+            <div class="explainer-step">
+                <div class="explainer-num">3</div>
+                <div class="explainer-text"><strong>Receiver verifies the signature.</strong> The receiving server looks up the public key in DNS and uses it to verify the signature, confirming the email hasn't been tampered with.</div>
+            </div>
+            <div class="explainer-step">
+                <div class="explainer-num">4</div>
+                <div class="explainer-text"><strong>DMARC uses the result.</strong> DKIM pass or fail feeds into DMARC enforcement — a failed DKIM check contributes to email being quarantined or rejected.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">DNS Lookup</div>
+        <div class="input-row">
+            <div class="input-group">
+                <label class="input-label" for="domain-input">Domain</label>
+                <input id="domain-input" class="text-input" type="text" placeholder="example.com" spellcheck="false" autocomplete="off" autocapitalize="none">
+            </div>
+            <div class="input-group">
+                <label class="input-label" for="selector-input">Selector</label>
+                <input id="selector-input" class="text-input" type="text" placeholder="selector1" spellcheck="false" autocomplete="off" autocapitalize="none">
+            </div>
+        </div>
+        <div class="selector-chips-label">Common selectors</div>
+        <div class="chips-row">
+            <button class="chip" onclick="setSelector('selector1')">selector1</button>
+            <button class="chip" onclick="setSelector('selector2')">selector2</button>
+            <button class="chip" onclick="setSelector('google')">google</button>
+            <button class="chip" onclick="setSelector('s1')">s1</button>
+            <button class="chip" onclick="setSelector('s2')">s2</button>
+            <button class="chip" onclick="setSelector('mail')">mail</button>
+            <button class="chip" onclick="setSelector('dkim')">dkim</button>
+            <button class="chip" onclick="setSelector('k1')">k1</button>
+        </div>
+        <div class="btn-row">
+            <button class="btn-analyze" id="lookup-btn" onclick="runLookup()">
+                Look Up DKIM
+            </button>
+            <button class="btn-clear" onclick="clearAll()">Clear</button>
+        </div>
+        <div id="error-bar" class="error-bar hidden"></div>
+    </div>
+
+    <!-- ── Results ─────────────────────────────────────────────────────────── -->
+    <div id="results" class="hidden">
+
+        <div class="card">
+            <div class="card-title">DNS Query</div>
+            <div id="dns-query-box" class="mono-box"></div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Raw TXT Record</div>
+            <div id="raw-record-box" class="raw-box"></div>
+        </div>
+
+        <div class="score-row">
+            <div class="score-card">
+                <div id="score-num" class="score-num" style="color:var(--good)">—</div>
+                <div class="score-label">Score / 100</div>
+                <div id="score-sublabel" class="score-sublabel">—</div>
+            </div>
+            <div class="score-card">
+                <div id="keytype-val" class="score-num" style="font-size:26px;font-family:'JetBrains Mono',Menlo,monospace;">—</div>
+                <div class="score-label">Key Type (k=)</div>
+                <div id="keytype-sublabel" class="score-sublabel">—</div>
+            </div>
+            <div class="score-card">
+                <div id="keysize-val" class="score-num" style="font-size:32px;">—</div>
+                <div class="score-label">Key Size</div>
+                <div id="keysize-sublabel" class="score-sublabel">—</div>
+            </div>
+        </div>
+
+        <div id="verdict-bar" class="verdict-bar"></div>
+
+        <div class="card">
+            <div class="card-title">Tag Breakdown</div>
+            <div id="token-list" class="token-list"></div>
+        </div>
+
+        <div id="issues-card" class="card hidden">
+            <div class="card-title">Issues Found</div>
+            <div id="issue-list" class="issue-list"></div>
+        </div>
+
+        <div class="card cta-card">
+            <div class="card-title">See Your Full Email Security Posture</div>
+            <p>This tool checks one DKIM selector at a time. MailFlow Sentinel scans all common selectors automatically, pairs DKIM results with SPF and DMARC enforcement, tests direct-send exposure, and flags open relays — giving you the complete picture in seconds.</p>
+            <a href="https://mailflowsentinel.com" class="cta-link" target="_blank" rel="noopener">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                Open MailFlow Sentinel
+            </a>
+        </div>
+
+    </div><!-- /results -->
+
+        <div class="footer">
+        Reboot Labs &nbsp;&middot;&nbsp; Siirila &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com">mailflowsentinel.com</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/dmarc-analyzer.html">DMARC</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/spf-fix.html">SPF</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/email-header-analyzer.html">Headers</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/dkim-analyzer.html">DKIM</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/url-scanner.html">URL Scanner</a>
+    </div>
+</div>
+
+<script>
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
+function setSelector(sel) {
+    document.getElementById('selector-input').value = sel;
+    document.getElementById('domain-input').focus();
+}
+
+function clearAll() {
+    document.getElementById('domain-input').value = '';
+    document.getElementById('selector-input').value = '';
+    document.getElementById('results').classList.add('hidden');
+    document.getElementById('error-bar').classList.add('hidden');
+    document.getElementById('domain-input').focus();
+}
+
+function showError(msg) {
+    const bar = document.getElementById('error-bar');
+    bar.textContent = msg;
+    bar.classList.remove('hidden');
+}
+
+function hideError() {
+    document.getElementById('error-bar').classList.add('hidden');
+}
+
+function setLoading(loading) {
+    const btn = document.getElementById('lookup-btn');
+    if (loading) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Looking up…';
+    } else {
+        btn.disabled = false;
+        btn.innerHTML = 'Look Up DKIM';
+    }
+}
+
+// ─── DNS-over-HTTPS ───────────────────────────────────────────────────────────
+
+async function fetchDKIM(domain, selector) {
+    const name = `${selector}._domainkey.${domain}`;
+    const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=TXT`;
+    const resp = await fetch(url, { headers: { 'Accept': 'application/dns-json' } });
+    if (!resp.ok) throw new Error(`DoH request failed: ${resp.status}`);
+    const data = await resp.json();
+    return { data, name, url };
+}
+
+function extractRecord(answer) {
+    const txt = (answer || []).filter(a => a.type === 16);
+    if (!txt.length) return null;
+    // Join all TXT answers, stripping outer quotes and joining split strings
+    return txt.map(a =>
+        a.data.replace(/^"|"$/g, '').replace(/"\s*"/g, '')
+    ).join('').trim();
+}
+
+// ─── DKIM parsing ─────────────────────────────────────────────────────────────
+
+function parseTags(raw) {
+    const tags = {};
+    const order = [];
+    raw.split(';').forEach(part => {
+        const trimmed = part.trim();
+        if (!trimmed) return;
+        const eq = trimmed.indexOf('=');
+        if (eq === -1) return;
+        const key = trimmed.slice(0, eq).trim().toLowerCase();
+        const val = trimmed.slice(eq + 1).trim();
+        tags[key] = val;
+        order.push({ key, val });
+    });
+    return { tags, order };
+}
+
+// ─── Key size detection ───────────────────────────────────────────────────────
+
+async function getRsaKeyBits(b64) {
+    const clean = b64.replace(/\s+/g, '');
+    if (!clean) return null;
+    try {
+        const binary = atob(clean);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const key = await crypto.subtle.importKey(
+            'spki', bytes.buffer,
+            { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+            true, ['verify']
+        );
+        const jwk = await crypto.subtle.exportKey('jwk', key);
+        const nB64 = jwk.n.replace(/-/g, '+').replace(/_/g, '/');
+        const pad = (4 - nB64.length % 4) % 4;
+        const nBytes = atob(nB64 + '='.repeat(pad)).length;
+        return nBytes * 8;
+    } catch (_) {
+        // Fallback: estimate from DER length
+        const rawLen = Math.floor(clean.replace(/=/g, '').length * 3 / 4);
+        if (rawLen < 100) return 512;
+        if (rawLen < 180) return 1024;
+        if (rawLen < 350) return 2048;
+        return 4096;
+    }
+}
+
+// ─── Analysis ─────────────────────────────────────────────────────────────────
+
+async function analyzeRecord(tags, raw, domain, selector, dnsName) {
+    const issues = [];
+    let score = 100;
+
+    const v    = tags['v'] || null;
+    const k    = (tags['k'] || 'rsa').toLowerCase();
+    const p    = tags['p'] !== undefined ? tags['p'].replace(/\s+/g, '') : null;
+    const t    = tags['t'] || null;
+    const h    = tags['h'] || null;
+    const s    = tags['s'] || null;
+    const n    = tags['n'] || null;
+
+    const isRevoked  = p !== null && p === '';
+    const isEd25519  = k === 'ed25519';
+
+    // ── Revoked ──────────────────────────────────────────────────────────────
+    if (isRevoked) {
+        return {
+            score: 0, issues: [{
+                severity: 'critical',
+                title: 'Key is revoked',
+                detail: 'The p= tag is present but empty, which signals that this DKIM key has been intentionally revoked. Any email signed with this selector will fail DKIM verification. If this is intentional, no action is needed. If not, a valid public key should be published.',
+            }],
+            keyBits: null, isRevoked: true, isEd25519: false, k, p, t, h, s, n, v,
+        };
+    }
+
+    // ── Version ──────────────────────────────────────────────────────────────
+    if (!v) {
+        score -= 5;
+        issues.push({
+            severity: 'low',
+            title: 'Missing v=DKIM1 tag',
+            detail: 'The version tag is absent. While some receivers accept this, RFC 6376 requires v=DKIM1 as the first tag. Add v=DKIM1 to ensure maximum compatibility.',
+        });
+    } else if (v !== 'DKIM1') {
+        score -= 10;
+        issues.push({
+            severity: 'medium',
+            title: `Unrecognized version: v=${v}`,
+            detail: 'The only valid value for v= is DKIM1. Receivers may reject or ignore this record.',
+        });
+    }
+
+    // ── Key type ─────────────────────────────────────────────────────────────
+    if (!['rsa', 'ed25519'].includes(k)) {
+        score -= 10;
+        issues.push({
+            severity: 'medium',
+            title: `Unknown key type: k=${k}`,
+            detail: `Valid values are k=rsa and k=ed25519. Receivers may not recognize "${k}" and could fail verification.`,
+        });
+    }
+
+    // ── Key size ─────────────────────────────────────────────────────────────
+    let keyBits = null;
+    if (!isEd25519 && p) {
+        keyBits = await getRsaKeyBits(p);
+        if (keyBits !== null) {
+            if (keyBits <= 512) {
+                score -= 40;
+                issues.push({
+                    severity: 'critical',
+                    title: `Critically weak RSA key: ${keyBits}-bit`,
+                    detail: `A ${keyBits}-bit RSA key can be factored in hours using commodity hardware. An attacker who recovers the private key can forge DKIM signatures for any email from this domain. Rotate to a 2048-bit key immediately.`,
+                });
+            } else if (keyBits < 2048) {
+                score -= 20;
+                issues.push({
+                    severity: 'high',
+                    title: `Weak RSA key: ${keyBits}-bit`,
+                    detail: `${keyBits}-bit RSA keys are below the recommended minimum of 2048 bits and are considered weak by modern standards. NIST deprecated 1024-bit keys in 2013. Rotate to a 2048-bit or 4096-bit key.`,
+                });
+            }
+        }
+    } else if (isEd25519) {
+        keyBits = 256; // Ed25519 is always 256-bit but equivalent to ~3000-bit RSA
+    }
+
+    // ── Testing mode ─────────────────────────────────────────────────────────
+    if (t) {
+        const flags = t.toLowerCase().split(':').map(f => f.trim());
+        if (flags.includes('y')) {
+            score -= 15;
+            issues.push({
+                severity: 'medium',
+                title: 'Testing mode active (t=y)',
+                detail: 'The t=y flag signals that this key is in testing mode. Receivers should treat DKIM failures the same as if DKIM were not present — meaning the signature provides no enforcement benefit. Remove the y flag when the key is production-ready.',
+            });
+        }
+        if (flags.includes('s')) {
+            // Not an issue, but worth noting
+        }
+    }
+
+    // ── Hash algorithms ───────────────────────────────────────────────────────
+    if (h) {
+        const algos = h.toLowerCase().split(':').map(a => a.trim());
+        if (algos.includes('sha1') && !algos.includes('sha256')) {
+            score -= 10;
+            issues.push({
+                severity: 'medium',
+                title: 'Only SHA-1 accepted (h=sha1)',
+                detail: 'SHA-1 is cryptographically broken for collision resistance. Accepting only SHA-1 signatures means the protection DKIM provides is weaker than intended. Add sha256 to the list (h=sha256:sha1 or h=sha256 only).',
+            });
+        }
+    }
+
+    // ── Missing public key ────────────────────────────────────────────────────
+    if (p === null || p === undefined) {
+        score -= 30;
+        issues.push({
+            severity: 'critical',
+            title: 'Missing p= (public key)',
+            detail: 'The p= tag is required. Without it, receivers cannot verify DKIM signatures and the record is effectively broken.',
+        });
+    }
+
+    score = Math.max(0, score);
+
+    const sevOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+    issues.sort((a, b) => sevOrder[a.severity] - sevOrder[b.severity]);
+
+    return { score, issues, keyBits, isRevoked, isEd25519, k, p, t, h, s, n, v };
+}
+
+// ─── Rendering ────────────────────────────────────────────────────────────────
+
+function scoreColor(score) {
+    if (score >= 80) return 'var(--good)';
+    if (score >= 50) return 'var(--warn)';
+    return 'var(--bad)';
+}
+
+function scoreLabel(score, isRevoked) {
+    if (isRevoked) return 'Revoked';
+    if (score >= 90) return 'Strong';
+    if (score >= 70) return 'Good';
+    if (score >= 50) return 'Moderate';
+    if (score >= 25) return 'Weak';
+    return 'Critical';
+}
+
+function buildVerdict(result, domain, selector) {
+    const { score, isRevoked, isEd25519, keyBits, k, t, issues } = result;
+
+    if (isRevoked) {
+        return `<strong>This DKIM key is revoked.</strong> The selector <code>${selector}._domainkey.${domain}</code> is intentionally retired — its p= tag is empty. Any email signed with this selector will fail DKIM verification. If this domain sends mail, a different active selector must be in use.`;
+    }
+
+    let parts = [];
+
+    // Overall posture sentence
+    if (score >= 90) {
+        parts.push(`The DKIM record for <code>${selector}._domainkey.${domain}</code> is well-configured.`);
+    } else if (score >= 70) {
+        parts.push(`The DKIM record for <code>${selector}._domainkey.${domain}</code> is functional but has issues worth addressing.`);
+    } else if (score >= 40) {
+        parts.push(`The DKIM record for <code>${selector}._domainkey.${domain}</code> has significant weaknesses.`);
+    } else {
+        parts.push(`The DKIM record for <code>${selector}._domainkey.${domain}</code> has critical problems that undermine email authentication.`);
+    }
+
+    // Key strength sentence
+    if (isEd25519) {
+        parts.push('The Ed25519 key is cryptographically modern and strong — equivalent to a ~3000-bit RSA key with much smaller key size.');
+    } else if (keyBits !== null) {
+        if (keyBits >= 2048) {
+            parts.push(`The ${keyBits}-bit RSA key meets current best practices.`);
+        } else if (keyBits >= 1024) {
+            parts.push(`The ${keyBits}-bit RSA key is below the 2048-bit minimum recommended by NIST — rotate it to a stronger key.`);
+        } else {
+            parts.push(`The ${keyBits}-bit RSA key is critically weak and must be replaced immediately.`);
+        }
+    }
+
+    // Testing mode
+    const flags = (t || '').toLowerCase().split(':').map(f => f.trim());
+    if (flags.includes('y')) {
+        parts.push('Testing mode (t=y) is active — receivers treat this key as advisory only, so DKIM failures have no enforcement impact until the flag is removed.');
+    }
+
+    // Top issue CTA
+    if (issues.length > 0) {
+        parts.push(`Most important fix: ${issues[0].title.toLowerCase()}.`);
+    }
+
+    return parts.join(' ');
+}
+
+function tagColorClass(key, val, result) {
+    switch (key) {
+        case 'v': return val === 'DKIM1' ? 'tok-version' : 'tok-bad';
+        case 'k': return ['rsa','ed25519'].includes((val||'').toLowerCase()) ? 'tok-good' : 'tok-bad';
+        case 'p': {
+            if (val === '') return 'tok-critical';
+            if (!val) return 'tok-missing';
+            if (result.keyBits && result.keyBits < 1024) return 'tok-bad';
+            if (result.keyBits && result.keyBits < 2048) return 'tok-warn';
+            return 'tok-good';
+        }
+        case 't': {
+            const flags = (val||'').toLowerCase().split(':').map(f=>f.trim());
+            return flags.includes('y') ? 'tok-warn' : 'tok-neutral';
+        }
+        case 'h': {
+            const algos = (val||'').toLowerCase().split(':').map(a=>a.trim());
+            if (algos.includes('sha1') && !algos.includes('sha256')) return 'tok-warn';
+            return 'tok-good';
+        }
+        case 's': return 'tok-neutral';
+        case 'n': return 'tok-neutral';
+        default: return 'tok-neutral';
+    }
+}
+
+function tagLabel(key) {
+    return {
+        v: 'Version',
+        k: 'Key Type',
+        p: 'Public Key',
+        t: 'Flags',
+        h: 'Hash Algorithms',
+        s: 'Service Type',
+        n: 'Notes',
+    }[key] || key.toUpperCase();
+}
+
+function tagDescription(key, val, result) {
+    switch (key) {
+        case 'v':
+            return val === 'DKIM1'
+                ? 'Version identifier. Must be DKIM1 and should appear as the first tag. Tells receivers this is a DKIM public key record.'
+                : `Unrecognized version "${val}". Only DKIM1 is valid — receivers may ignore this record.`;
+        case 'k': {
+            const kl = (val||'rsa').toLowerCase();
+            if (kl === 'rsa') return 'RSA is the most widely supported DKIM key type. The p= value is a base64-encoded RSA SubjectPublicKeyInfo (SPKI) structure. 2048-bit keys are the recommended minimum.';
+            if (kl === 'ed25519') return 'Ed25519 is a modern elliptic-curve key type with strong security properties and compact key size. Supported by major mail providers. Equivalent in strength to a ~3000-bit RSA key.';
+            return `"${val}" is not a recognized key type. Supported values are rsa and ed25519.`;
+        }
+        case 'p': {
+            if (val === '') return 'Empty p= means this key is revoked. Receiving servers will treat any email signed with this selector as a DKIM failure.';
+            const bits = result.keyBits;
+            let note = 'Base64-encoded public key used to verify DKIM signatures.';
+            if (bits) note += ` Detected key size: ${bits} bits.`;
+            return note;
+        }
+        case 't': {
+            const flags = (val||'').split(':').map(f => f.trim()).filter(Boolean);
+            const parts = [];
+            if (flags.includes('y')) parts.push('<strong>y</strong>: Testing mode — receivers should not reject mail based on this key. Remove when ready for production.');
+            if (flags.includes('s')) parts.push('<strong>s</strong>: Strict — this key only applies to the exact domain, not subdomains (i=@domain only).');
+            return parts.length ? parts.join('<br>') : `Flag value "${val}" — no recognized flags detected.`;
+        }
+        case 'h': {
+            const algos = (val||'').split(':').map(a => a.trim());
+            const desc = algos.map(a => {
+                if (a === 'sha256') return '<strong>sha256</strong>: Recommended — cryptographically strong.';
+                if (a === 'sha1') return '<strong>sha1</strong>: Deprecated — SHA-1 is broken for collision resistance. Keep only as fallback, not sole option.';
+                return `<strong>${a}</strong>: Unrecognized algorithm.`;
+            }).join('<br>');
+            return desc || 'Specifies which hash algorithms are acceptable for DKIM signatures using this key.';
+        }
+        case 's': {
+            const services = (val||'').split(':').map(s => s.trim());
+            if (services.includes('*')) return 'Wildcard — this key is valid for all services. This is the default and most common value.';
+            if (services.includes('email')) return 'Restricts this key to email service only. Mail signed with this key for other services would fail verification.';
+            return `Service type restricted to: ${val}`;
+        }
+        case 'n':
+            return `Human-readable notes for key administrators: "${val}". These notes are not used by receivers — they exist for documentation purposes only.`;
+        default:
+            return `"${key}" is not a standard DKIM tag and will be ignored by receivers.`;
+    }
+}
+
+function tagNote(key, val, result) {
+    if (key === 'p' && result.keyBits) {
+        const bits = result.keyBits;
+        if (result.isEd25519) return null;
+        if (bits <= 512) return `⚠ Critically weak — ${bits}-bit key is easily broken`;
+        if (bits < 2048) return `⚠ Weak — ${bits}-bit key, rotate to 2048-bit`;
+        if (bits === 2048) return `✓ 2048-bit — meets minimum recommendation`;
+        return `✓ ${bits}-bit — strong`;
+    }
+    if (key === 'k' && result.isEd25519) return '✓ Ed25519 — modern and strong';
+    if (key === 't') {
+        const flags = (val||'').toLowerCase().split(':').map(f=>f.trim());
+        if (flags.includes('y')) return '⚠ Testing mode — no enforcement';
+    }
+    return null;
+}
+
+function badgeHtml(severity) {
+    return `<span class="badge badge-${severity}">${severity}</span>`;
+}
+
+function renderResults(result, raw, dnsName, domain, selector, dohUrl) {
+    const { score, issues, isRevoked, isEd25519, keyBits, k, v, t, h, s, n, p } = result;
+
+    // DNS query box
+    const shortName = dnsName;
+    document.getElementById('dns-query-box').innerHTML =
+        `<div class="cmd-label">DNS name queried</div>` +
+        `<div style="color:var(--accent);font-weight:600;margin-bottom:10px;">${escHtml(shortName)}</div>` +
+        `<div class="cmd-label">dig command equivalent</div>` +
+        `<div class="cmd-line">dig TXT ${escHtml(shortName)}</div>` +
+        `<div style="margin-top:10px;" class="cmd-label">DNS-over-HTTPS (Cloudflare)</div>` +
+        `<div style="color:var(--muted);word-break:break-all;">${escHtml(dohUrl)}</div>`;
+
+    // Raw record
+    document.getElementById('raw-record-box').textContent = raw;
+
+    // Score cards
+    const sc = document.getElementById('score-num');
+    sc.textContent = isRevoked ? '0' : String(score);
+    sc.style.color = scoreColor(score);
+    document.getElementById('score-sublabel').textContent = scoreLabel(score, isRevoked);
+    document.getElementById('score-sublabel').style.color = scoreColor(score);
+
+    const ktVal = document.getElementById('keytype-val');
+    const ktSub = document.getElementById('keytype-sublabel');
+    ktVal.textContent = (k || 'rsa').toUpperCase();
+    if (k === 'ed25519') {
+        ktVal.style.color = 'var(--good)';
+        ktSub.textContent = 'Modern elliptic curve';
+        ktSub.style.color = 'var(--good)';
+    } else if (k === 'rsa') {
+        ktVal.style.color = 'var(--text)';
+        ktSub.textContent = 'Widely supported';
+        ktSub.style.color = 'var(--muted)';
+    } else {
+        ktVal.style.color = 'var(--bad)';
+        ktSub.textContent = 'Unknown type';
+        ktSub.style.color = 'var(--bad)';
+    }
+
+    const ksVal = document.getElementById('keysize-val');
+    const ksSub = document.getElementById('keysize-sublabel');
+    if (isRevoked || p === '') {
+        ksVal.textContent = '—';
+        ksVal.style.color = 'var(--bad)';
+        ksSub.textContent = 'Key revoked';
+        ksSub.style.color = 'var(--bad)';
+    } else if (isEd25519) {
+        ksVal.textContent = '256';
+        ksVal.style.color = 'var(--good)';
+        ksSub.textContent = 'Ed25519 (≈3000-bit RSA)';
+        ksSub.style.color = 'var(--good)';
+    } else if (keyBits) {
+        ksVal.textContent = String(keyBits);
+        const ksColor = keyBits >= 2048 ? 'var(--good)' : keyBits >= 1024 ? 'var(--warn)' : 'var(--bad)';
+        ksVal.style.color = ksColor;
+        ksSub.textContent = keyBits >= 2048 ? 'Meets recommendation' : keyBits >= 1024 ? 'Below 2048-bit minimum' : 'Critically weak';
+        ksSub.style.color = ksColor;
+    } else {
+        ksVal.textContent = '—';
+        ksVal.style.color = 'var(--muted)';
+        ksSub.textContent = 'Key absent';
+        ksSub.style.color = 'var(--muted)';
+    }
+
+    // Verdict
+    const vBar = document.getElementById('verdict-bar');
+    vBar.innerHTML = buildVerdict(result, domain, selector);
+    const vColor = isRevoked ? 'var(--bad)' : score >= 70 ? 'var(--good)' : score >= 40 ? 'var(--warn)' : 'var(--bad)';
+    vBar.style.borderLeftColor = vColor;
+
+    // Tag breakdown
+    const { order } = parseTags(raw);
+    const known = new Set(['v','k','p','t','h','s','n']);
+    // Ensure p= is shown even if absent
+    const hasPTag = order.some(o => o.key === 'p');
+    if (!hasPTag) order.push({ key: 'p', val: null });
+
+    const tokenList = document.getElementById('token-list');
+    tokenList.innerHTML = order.map(({ key, val }) => {
+        const displayVal = val === null ? '(not present)' : val === '' ? '(empty — revoked)' : val.length > 64 ? val.slice(0, 60) + '…' : val;
+        const colorClass = tagColorClass(key, val, result);
+        const label = tagLabel(key);
+        const desc = tagDescription(key, val, result);
+        const note = tagNote(key, val, result);
+        const rawText = val === null ? `${key}= (missing)` : `${key}=${displayVal}`;
+        const unknownNote = known.has(key) ? '' : ` <span class="badge badge-info">non-standard</span>`;
+        return `<div class="token-item">
+            <div>
+                <div class="token-raw ${colorClass}">${escHtml(rawText)}</div>
+            </div>
+            <div class="token-body">
+                <div class="token-mech">${escHtml(label)}${unknownNote}</div>
+                <div class="token-desc">${desc}</div>
+                ${note ? `<div class="token-note">${escHtml(note)}</div>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+
+    // Issues
+    const issuesCard = document.getElementById('issues-card');
+    const issueList = document.getElementById('issue-list');
+    if (issues.length) {
+        issueList.innerHTML = issues.map(iss => `
+            <div class="issue-item">
+                <div style="flex-shrink:0;padding-top:1px;">${badgeHtml(iss.severity)}</div>
+                <div class="issue-body">
+                    <div class="issue-title">${escHtml(iss.title)}</div>
+                    <div class="issue-detail">${escHtml(iss.detail)}</div>
+                </div>
+            </div>`).join('');
+        issuesCard.classList.remove('hidden');
+    } else {
+        issuesCard.classList.add('hidden');
+    }
+
+    document.getElementById('results').classList.remove('hidden');
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function escHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+// ─── Not found / error states ─────────────────────────────────────────────────
+
+function showNotFound(domain, selector, name) {
+    hideError();
+    document.getElementById('results').classList.add('hidden');
+    showError(
+        `No DKIM record found at ${name}. ` +
+        `This selector is either not published for ${domain}, or the domain uses a different selector. ` +
+        `Try one of the common selector chips above.`
+    );
+}
+
+// ─── Main entry point ─────────────────────────────────────────────────────────
+
+async function runLookup() {
+    const rawDomain = document.getElementById('domain-input').value.trim().toLowerCase();
+    const rawSelector = document.getElementById('selector-input').value.trim().toLowerCase();
+
+    hideError();
+    document.getElementById('results').classList.add('hidden');
+
+    // Normalize: strip mailto:, extract domain from email
+    let domain = rawDomain.replace(/^mailto:/i, '').replace(/^.*@/, '').replace(/[/\\].*$/, '');
+    const selector = rawSelector;
+
+    if (!domain) { showError('Please enter a domain name.'); return; }
+    if (!selector) { showError('Please enter a selector name.'); return; }
+    if (!/^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$/i.test(domain)) {
+        showError('That doesn\'t look like a valid domain. Use a format like example.com.'); return;
+    }
+
+    setLoading(true);
+    try {
+        const { data, name, url } = await fetchDKIM(domain, selector);
+
+        const raw = extractRecord(data.Answer);
+
+        if (!raw) {
+            showNotFound(domain, selector, name);
+            return;
+        }
+
+        if (!raw.toLowerCase().includes('v=dkim1') && !raw.toLowerCase().includes('k=') && !raw.toLowerCase().includes('p=')) {
+            showError(`Record found at ${name} but it doesn't appear to be a DKIM key record. Raw: ${raw.slice(0, 200)}`);
+            return;
+        }
+
+        const { tags } = parseTags(raw);
+        const result = await analyzeRecord(tags, raw, domain, selector, name);
+        renderResults(result, raw, name, domain, selector, url);
+    } catch (e) {
+        showError('DNS lookup failed. Check your connection and try again. (' + e.message + ')');
+    } finally {
+        setLoading(false);
+    }
+}
+
+// ─── Keyboard + URL params ────────────────────────────────────────────────────
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        const focused = document.activeElement;
+        if (focused && (focused.id === 'domain-input' || focused.id === 'selector-input')) {
+            runLookup();
+        }
+    }
+});
+
+(function loadFromUrl() {
+    const p = new URLSearchParams(window.location.search);
+    const d = p.get('domain');
+    const s = p.get('selector');
+    if (d) document.getElementById('domain-input').value = d;
+    if (s) document.getElementById('selector-input').value = s;
+    if (d && s) runLookup();
+})();
+</script>
+<script>(function(){var b=document.getElementById("badge-btn"),p=document.getElementById("badge-popover");if(!b||!p)return;function c(){p.classList.remove("open")}b.addEventListener("click",function(e){e.stopPropagation();p.classList.toggle("open")});document.addEventListener("click",c);document.addEventListener("keydown",function(e){if(e.key==="Escape")c()});})();</script>
+</body>
+</html>

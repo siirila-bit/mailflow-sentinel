@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reboot Labs — Security Tools</title>
+    <meta name="description" content="Free security tools for email authentication and web safety. Analyze SPF, DKIM, DMARC, email headers, and scan URLs for risk.">
+    <meta property="og:title" content="Reboot Labs — Security Tools">
+    <meta property="og:description" content="Free tools for email security and URL risk analysis. SPF, DKIM, DMARC analyzers, email header parser, and URL scanner.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://mailflowsentinel.com">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230b1020'/><path d='M4 10l12 9 12-9' stroke='%235aa9ff' stroke-width='2' fill='none' stroke-linecap='round'/><rect x='4' y='10' width='24' height='16' rx='2' stroke='%235aa9ff' stroke-width='2' fill='none'/></svg>">
+    <style>
+        :root {
+            --bg: #0b1020;
+            --panel: rgba(18,25,45,0.78);
+            --text: #e8edf7;
+            --muted: #95a3bf;
+            --border: rgba(255,255,255,0.08);
+            --accent: #5aa9ff;
+            --accent-2: #7c5cff;
+            --good: #27c281;
+            --shadow: 0 18px 50px rgba(0,0,0,0.35);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(90,169,255,0.14), transparent 28%),
+                radial-gradient(circle at top right, rgba(124,92,255,0.14), transparent 30%),
+                linear-gradient(180deg, #09101c 0%, #0b1020 100%);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .wrap { max-width: 900px; width: 100%; padding: 64px 24px; }
+
+        /* Topbar */
+        .topbar { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 28px; }
+        .badge-wrap { position: relative; }
+        .topbar-badge {
+            font-size: 13px; font-weight: 600; color: var(--accent);
+            padding: 6px 14px; border-radius: 8px;
+            border: 1px solid rgba(90,169,255,0.3);
+            background: rgba(90,169,255,0.06);
+            cursor: pointer; user-select: none;
+        }
+        .badge-popover {
+            position: absolute; top: calc(100% + 10px); right: 0; width: 260px;
+            background: rgba(11,17,35,0.98);
+            border: 1px solid rgba(90,169,255,0.22);
+            border-radius: 12px; padding: 14px 16px;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.55);
+            z-index: 200; display: none;
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        }
+        .badge-popover.open { display: block; }
+        .badge-popover-text { font-size: 13px; color: var(--muted); line-height: 1.55; margin: 0 0 12px; }
+        .badge-popover-link {
+            display: inline-flex; align-items: center; gap: 5px;
+            font-size: 12px; font-weight: 700; color: var(--accent); text-decoration: none;
+        }
+        .badge-popover-link svg { transition: transform 0.15s; }
+        .badge-popover-link:hover svg { transform: translateX(2px); }
+
+        /* Identity */
+        .identity { margin-bottom: 32px; }
+        .name {
+            font-size: 42px; font-weight: 800; letter-spacing: -0.03em;
+            line-height: 1.08; margin-bottom: 8px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        .site-title { font-size: 15px; font-weight: 600; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 20px; }
+        .tagline { font-size: 18px; color: var(--text); line-height: 1.5; opacity: 0.88; }
+        .scan-counter {
+            display: inline-flex; align-items: center; gap: 6px;
+            margin-top: 16px;
+            font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+            color: var(--muted);
+            padding: 5px 12px; border-radius: 7px;
+            background: rgba(149,163,191,0.07); border: 1px solid rgba(149,163,191,0.15);
+            opacity: 0; transition: opacity 0.6s ease;
+        }
+        .scan-counter.loaded { opacity: 1; }
+        .scan-counter-dot {
+            width: 5px; height: 5px; border-radius: 50%;
+            background: var(--muted); opacity: 0.5;
+        }
+
+        /* Hero card */
+        .hero-card {
+            display: block;
+            background: linear-gradient(140deg, rgba(90,169,255,0.09) 0%, rgba(124,92,255,0.07) 100%), var(--panel);
+            backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(90,169,255,0.22);
+            border-radius: 22px; padding: 40px 44px;
+            text-decoration: none; margin-bottom: 16px;
+            position: relative; overflow: hidden;
+            transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.4);
+        }
+        .hero-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, rgba(90,169,255,0.7) 0%, rgba(124,92,255,0.6) 55%, transparent 100%);
+        }
+        .hero-card:hover { border-color: rgba(90,169,255,0.4); transform: translateY(-2px); box-shadow: 0 30px 70px rgba(0,0,0,0.45); }
+        .hero-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+        .hero-icon { width: 56px; height: 56px; flex-shrink: 0; }
+        .hero-live-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+            color: var(--good); padding: 5px 12px; border-radius: 7px;
+            background: rgba(39,194,129,0.1); border: 1px solid rgba(39,194,129,0.25); flex-shrink: 0;
+        }
+        .hero-live-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--good); box-shadow: 0 0 6px rgba(39,194,129,0.7);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
+        .hero-name { font-size: 28px; font-weight: 800; letter-spacing: -0.025em; color: var(--text); margin-bottom: 10px; line-height: 1.1; }
+        .hero-desc { font-size: 15px; color: var(--muted); line-height: 1.65; margin-bottom: 22px; max-width: 580px; }
+        .hero-checks { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
+        .check-tag {
+            font-size: 11px; font-weight: 600; padding: 4px 11px; border-radius: 6px;
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+            color: var(--muted); letter-spacing: 0.02em;
+        }
+        .hero-cta {
+            display: inline-flex; align-items: center; gap: 9px;
+            padding: 13px 26px; border-radius: 13px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            color: #fff; font-weight: 700; font-size: 15px;
+            box-shadow: 0 8px 26px rgba(90,169,255,0.22);
+            transition: opacity 0.15s, box-shadow 0.15s;
+        }
+        .hero-card:hover .hero-cta { opacity: 0.9; box-shadow: 0 12px 32px rgba(90,169,255,0.32); }
+        .hero-cta svg { transition: transform 0.15s; }
+        .hero-card:hover .hero-cta svg { transform: translateX(2px); }
+
+        /* Section labels */
+        .tools-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(149,163,191,0.45); margin-bottom: 12px; margin-top: 8px; }
+
+        /* Tool grid */
+        .tools { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+
+        /* Standard card */
+        .card {
+            display: block; background: var(--panel); border: 1px solid var(--border);
+            border-radius: 16px; padding: 26px 28px; text-decoration: none;
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+        }
+        .card:hover { border-color: rgba(90,169,255,0.3); transform: translateY(-2px); box-shadow: var(--shadow); }
+        .card-icon { width: 36px; height: 36px; margin-bottom: 16px; opacity: 0.9; }
+        .card-name { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 7px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
+        .card-desc { font-size: 13px; color: var(--muted); line-height: 1.55; }
+        .card-link { display: inline-flex; align-items: center; gap: 4px; margin-top: 16px; font-size: 12px; font-weight: 600; color: var(--accent); }
+        .card-link svg { transition: transform 0.15s; }
+        .card:hover .card-link svg { transform: translateX(2px); }
+
+        /* Wide card */
+        .card-wide { grid-column: 1 / -1; }
+        .card-wide .card-inner { display: flex; align-items: flex-start; gap: 22px; }
+        .card-wide .card-icon { margin-bottom: 0; flex-shrink: 0; margin-top: 2px; }
+        .card-wide .card-body { flex: 1; min-width: 0; }
+
+        /* New badge */
+        .badge-new {
+            font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em;
+            padding: 2px 7px; border-radius: 4px;
+            background: rgba(255,107,107,0.14); color: #ff6b6b;
+            border: 1px solid rgba(255,107,107,0.28); flex-shrink: 0;
+        }
+
+        /* Section divider inside grid */
+        .grid-section-label {
+            grid-column: 1 / -1;
+            font-size: 11px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.08em; color: rgba(149,163,191,0.45); padding-top: 6px;
+        }
+
+        /* Footer */
+        .footer { text-align: center; margin-top: 40px; font-size: 13px; color: rgba(149,163,191,0.4); }
+        .footer a { color: rgba(90,169,255,0.4); text-decoration: none; }
+        .footer a:hover { color: rgba(90,169,255,0.7); }
+
+        @media (max-width: 600px) {
+            .wrap { padding: 40px 16px 56px; }
+            .name { font-size: 34px; }
+            .hero-card { padding: 28px 24px; }
+            .hero-name { font-size: 22px; }
+            .hero-desc { font-size: 14px; }
+            .hero-cta { width: 100%; justify-content: center; }
+            .tools { grid-template-columns: 1fr; }
+            .card-wide .card-inner { flex-direction: column; gap: 14px; }
+        }
+        @media (max-width: 400px) { .hero-live-badge { display: none; } }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+
+        <div class="topbar">
+            <div class="badge-wrap">
+                <span class="topbar-badge" id="badge-btn">MailFlow Sentinel</span>
+                <div class="badge-popover" id="badge-popover">
+                    <p class="badge-popover-text">DNS-based email security assessment. Enter any domain to see SPF, DKIM, DMARC, open relay exposure, and Microsoft 365 direct-send bypass — the complete picture in seconds.</p>
+                    <a class="badge-popover-link" href="https://mailflowsentinel.com" target="_blank" rel="noopener">
+                        Open MailFlow Sentinel
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6h7M6.5 3l3 3-3 3" stroke="#5aa9ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="identity">
+            <div class="name">Reboot Labs</div>
+            <div class="site-title">Security Tools</div>
+            <div class="tagline">Tools that show what attackers see.</div>
+            <div class="scan-counter" id="scan-counter"><div class="scan-counter-dot"></div><span id="scan-count-val"></span></div>
+        </div>
+
+        <a class="hero-card" href="https://mailflowsentinel.com" target="_blank" rel="noopener">
+            <div class="hero-header">
+                <svg class="hero-icon" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="56" height="56" rx="14" fill="rgba(90,169,255,0.12)"/>
+                    <path d="M11 21l17 12 17-12" stroke="#5aa9ff" stroke-width="2.2" stroke-linecap="round"/>
+                    <rect x="11" y="21" width="34" height="20" rx="3.5" stroke="#5aa9ff" stroke-width="2.2"/>
+                    <circle cx="40" cy="19" r="6" fill="#27c281"/>
+                    <path d="M37 19l2 2 4-4" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <div class="hero-live-badge">
+                    <div class="hero-live-dot"></div>
+                    Live DNS Scan
+                </div>
+            </div>
+            <div class="hero-name">MailFlow Sentinel</div>
+            <div class="hero-desc">Real-time DNS-based security assessment for any domain. See your full email authentication posture — SPF, DKIM, DMARC, open relay exposure, and Microsoft 365 direct-send bypass — exactly as an attacker would.</div>
+            <div class="hero-checks">
+                <span class="check-tag">SPF</span>
+                <span class="check-tag">DKIM</span>
+                <span class="check-tag">DMARC</span>
+                <span class="check-tag">MTA-STS</span>
+                <span class="check-tag">TLS-RPT</span>
+                <span class="check-tag">Open Relay</span>
+                <span class="check-tag">Direct Send</span>
+                <span class="check-tag">BIMI</span>
+            </div>
+            <div class="hero-cta">
+                Analyze a Domain
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+        </a>
+
+        <div class="tools-label">Analyzers</div>
+        <div class="tools">
+
+            <a class="card" href="https://mailflowsentinel.com/dmarc-analyzer.html" target="_blank" rel="noopener">
+                <svg class="card-icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="36" height="36" rx="10" fill="rgba(39,194,129,0.1)"/>
+                    <path d="M18 7l10 4v8c0 5-4 9-10 11C12 28 8 24 8 19V11l10-4z" stroke="#27c281" stroke-width="1.8" stroke-linejoin="round"/>
+                    <path d="M13 18l3 3 7-7" stroke="#27c281" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <div class="card-name">DMARC Analyzer</div>
+                <div class="card-desc">Break down every DMARC tag, score your policy, flag issues by severity, and get a hardened record ready to deploy.</div>
+                <div class="card-link">Open <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6h7M6.5 3l3 3-3 3" stroke="#5aa9ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            </a>
+
+            <a class="card" href="https://mailflowsentinel.com/spf-fix.html" target="_blank" rel="noopener">
+                <svg class="card-icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="36" height="36" rx="10" fill="rgba(124,92,255,0.1)"/>
+                    <rect x="7" y="10" width="22" height="16" rx="2.5" stroke="#7c5cff" stroke-width="1.8"/>
+                    <path d="M11 16h8M11 20h5" stroke="#7c5cff" stroke-width="1.8" stroke-linecap="round"/>
+                    <path d="M24 19l2-2-2-2" stroke="#7c5cff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <div class="card-name">SPF Analyzer</div>
+                <div class="card-desc">Analyze and repair SPF records. Understand lookup limits, flattening, and exactly what needs to change.</div>
+                <div class="card-link">Open <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6h7M6.5 3l3 3-3 3" stroke="#5aa9ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            </a>
+
+            <a class="card" href="https://mailflowsentinel.com/email-header-analyzer.html" target="_blank" rel="noopener">
+                <svg class="card-icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="36" height="36" rx="10" fill="rgba(240,179,74,0.1)"/>
+                    <rect x="7" y="9" width="22" height="18" rx="2.5" stroke="#f0b34a" stroke-width="1.8"/>
+                    <path d="M11 14h14M11 18h9M11 22h5" stroke="#f0b34a" stroke-width="1.8" stroke-linecap="round"/>
+                    <circle cx="27" cy="10" r="3.5" fill="#ff6b6b"/>
+                    <path d="M25.8 9.5l2.4 1M25.8 10.5l2.4-1" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/>
+                </svg>
+                <div class="card-name">Email Header Analyzer</div>
+                <div class="card-desc">Trace delivery hops, verify SPF/DKIM/DMARC authentication, surface spoofing indicators, and get a trust score.</div>
+                <div class="card-link">Open <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6h7M6.5 3l3 3-3 3" stroke="#5aa9ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            </a>
+
+            <a class="card" href="https://mailflowsentinel.com/dkim-analyzer.html" target="_blank" rel="noopener">
+                <svg class="card-icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="36" height="36" rx="10" fill="rgba(90,169,255,0.1)"/>
+                    <rect x="10" y="18" width="16" height="11" rx="2" stroke="#5aa9ff" stroke-width="1.8"/>
+                    <path d="M13 18v-4a5 5 0 0 1 10 0v4" stroke="#5aa9ff" stroke-width="1.8" stroke-linecap="round"/>
+                    <circle cx="18" cy="23" r="1.5" fill="#5aa9ff"/>
+                    <path d="M18 24.5v2" stroke="#5aa9ff" stroke-width="1.6" stroke-linecap="round"/>
+                </svg>
+                <div class="card-name">DKIM Analyzer</div>
+                <div class="card-desc">Look up DKIM public keys by selector, detect weak key sizes, flag revoked keys, and get a plain-English breakdown of every tag.</div>
+                <div class="card-link">Open <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6h7M6.5 3l3 3-3 3" stroke="#5aa9ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            </a>
+
+            <div class="grid-section-label">Web Security</div>
+
+            <a class="card card-wide" href="https://mailflowsentinel.com/url-scanner.html" target="_blank" rel="noopener">
+                <div class="card-inner">
+                    <svg class="card-icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="36" height="36" rx="10" fill="rgba(255,107,107,0.1)"/>
+                        <circle cx="16" cy="16" r="7" stroke="#ff6b6b" stroke-width="1.8"/>
+                        <path d="M21 21l5 5" stroke="#ff6b6b" stroke-width="1.8" stroke-linecap="round"/>
+                        <path d="M13 16h6M16 13v6" stroke="#ff6b6b" stroke-width="1.6" stroke-linecap="round"/>
+                    </svg>
+                    <div class="card-body">
+                        <div class="card-name">URL Scanner <span class="badge-new">New</span></div>
+                        <div class="card-desc">Follow the full redirect chain with status codes, check WHOIS domain age, validate SSL certificates, run Google Safe Browsing, and get a 0–100 risk score with a plain-English verdict.</div>
+                        <div class="card-link">Open <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6h7M6.5 3l3 3-3 3" stroke="#5aa9ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                    </div>
+                </div>
+            </a>
+
+        </div>
+
+            <div class="footer">
+        Reboot Labs &nbsp;&middot;&nbsp; Siirila &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com">mailflowsentinel.com</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/dmarc-analyzer.html">DMARC</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/spf-fix.html">SPF</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/email-header-analyzer.html">Headers</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/dkim-analyzer.html">DKIM</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/url-scanner.html">URL Scanner</a>
+    </div>
+
+    </div>
+    <script>(function(){
+        fetch('https://mailflowsentinel.com/stats')
+            .then(function(r){return r.json()})
+            .then(function(d){
+                var n=d.scans;
+                if(typeof n!=='number')return;
+                document.getElementById('scan-count-val').textContent=n.toLocaleString()+' domains analyzed';
+                document.getElementById('scan-counter').classList.add('loaded');
+            })
+            .catch(function(){});
+    })();</script>
+    <script>(function(){var b=document.getElementById("badge-btn"),p=document.getElementById("badge-popover");if(!b||!p)return;function c(){p.classList.remove("open")}b.addEventListener("click",function(e){e.stopPropagation();p.classList.toggle("open")});document.addEventListener("click",c);document.addEventListener("keydown",function(e){if(e.key==="Escape")c()});})();</script>
+</body>
+</html>

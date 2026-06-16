@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URL Scanner — Reboot Labs</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230b1020'/><path d='M4 10l12 9 12-9' stroke='%235aa9ff' stroke-width='2' fill='none' stroke-linecap='round'/><rect x='4' y='10' width='24' height='16' rx='2' stroke='%235aa9ff' stroke-width='2' fill='none'/></svg>">
+    <style>
+        :root {
+            --bg: #0b1020;
+            --panel: rgba(18, 25, 45, 0.78);
+            --text: #e8edf7;
+            --muted: #95a3bf;
+            --border: rgba(255,255,255,0.08);
+            --accent: #5aa9ff;
+            --accent-2: #7c5cff;
+            --good: #27c281;
+            --warn: #f0b34a;
+            --bad: #ff6b6b;
+            --shadow: 0 18px 50px rgba(0,0,0,0.35);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(90,169,255,0.14), transparent 28%),
+                radial-gradient(circle at top right, rgba(124,92,255,0.14), transparent 30%),
+                linear-gradient(180deg, #09101c 0%, #0b1020 100%);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        .wrap { max-width: 860px; margin: 0 auto; padding: 48px 24px 80px; }
+
+        .topbar {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 44px;
+        }
+        .topbar a {
+            display: inline-flex; align-items: center; gap: 7px;
+            font-size: 13px; font-weight: 600; color: var(--muted);
+            text-decoration: none; transition: color 0.15s;
+        }
+        .topbar a:hover { color: var(--accent); }
+        .topbar-badge {
+            font-size: 13px; font-weight: 600; color: var(--accent);
+            padding: 6px 14px; border-radius: 8px;
+            border: 1px solid rgba(90,169,255,0.3);
+            background: rgba(90,169,255,0.06);
+        }
+
+        .hero-title {
+            font-size: 38px; font-weight: 800; letter-spacing: -0.03em;
+            line-height: 1.08; margin-bottom: 10px;
+        }
+        .hero-title span {
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hero-sub {
+            font-size: 16px; color: var(--muted); line-height: 1.55;
+            margin-bottom: 36px; max-width: 600px;
+        }
+
+        .card {
+            background: var(--panel);
+            backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            border-radius: 20px; padding: 26px 30px; margin-bottom: 18px;
+        }
+        .card-title {
+            font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--accent); margin-bottom: 18px;
+        }
+
+        .url-input-row {
+            display: flex; gap: 10px; align-items: stretch;
+        }
+        .url-input {
+            flex: 1;
+            background: rgba(10,15,30,0.7); border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 12px; padding: 13px 16px;
+            font-size: 14px; color: var(--text); font-family: inherit;
+            outline: none; transition: border-color 0.2s;
+        }
+        .url-input:focus { border-color: rgba(90,169,255,0.45); }
+        .url-input::placeholder { color: rgba(149,163,191,0.4); }
+        .btn-scan {
+            padding: 13px 26px; border-radius: 12px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            color: #fff; font-weight: 700; font-size: 14px;
+            border: none; cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+            font-family: inherit; white-space: nowrap;
+        }
+        .btn-scan:hover { opacity: 0.88; transform: translateY(-1px); }
+        .btn-scan:active { transform: translateY(0); }
+        .btn-scan:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .examples-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+        .example-chip {
+            font-size: 11px; font-weight: 600; padding: 5px 12px; border-radius: 7px;
+            border: 1px solid var(--border); background: rgba(255,255,255,0.04);
+            color: var(--muted); cursor: pointer; transition: all 0.15s; font-family: inherit;
+        }
+        .example-chip:hover { border-color: rgba(90,169,255,0.3); color: var(--accent); background: rgba(90,169,255,0.06); }
+
+        /* Score */
+        .score-ring-wrap {
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+            flex-shrink: 0;
+        }
+        .score-ring {
+            width: 96px; height: 96px; position: relative;
+        }
+        .score-ring svg { transform: rotate(-90deg); }
+        .score-ring-val {
+            position: absolute; inset: 0; display: flex;
+            align-items: center; justify-content: center;
+            font-size: 26px; font-weight: 900; letter-spacing: -0.04em;
+        }
+        .score-ring-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+
+        .score-row { display: flex; gap: 20px; align-items: flex-start; }
+        .score-verdict-area { flex: 1; min-width: 0; }
+        .verdict-text {
+            font-size: 16px; font-weight: 700; margin-bottom: 8px; line-height: 1.3;
+        }
+        .verdict-sub { font-size: 13px; color: var(--muted); line-height: 1.55; }
+
+        /* Risk factors */
+        .factors-list { display: flex; flex-direction: column; gap: 8px; }
+        .factor-item {
+            display: flex; gap: 10px; align-items: flex-start;
+            padding: 10px 14px; border-radius: 10px;
+            background: rgba(10,15,30,0.5); border: 1px solid rgba(255,255,255,0.06);
+            font-size: 13px; color: var(--text); line-height: 1.5;
+        }
+        .factor-icon { flex-shrink: 0; margin-top: 1px; }
+        .clean-notice {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 14px; font-weight: 600; color: var(--good);
+            padding: 12px 16px; border-radius: 10px;
+            background: rgba(39,194,129,0.08); border: 1px solid rgba(39,194,129,0.2);
+        }
+
+        /* Redirect chain */
+        .chain-list { display: flex; flex-direction: column; gap: 0; }
+        .chain-hop {
+            display: flex; align-items: flex-start; gap: 12px;
+            padding: 12px 0; position: relative;
+        }
+        .chain-hop:not(:last-child)::after {
+            content: '';
+            position: absolute; left: 17px; top: 40px; bottom: -4px;
+            width: 2px; background: rgba(255,255,255,0.08);
+        }
+        .chain-dot {
+            flex-shrink: 0; width: 36px; height: 36px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: 800;
+        }
+        .chain-dot-redirect { background: rgba(240,179,74,0.12); border: 1px solid rgba(240,179,74,0.25); color: #f0b34a; }
+        .chain-dot-final    { background: rgba(39,194,129,0.12); border: 1px solid rgba(39,194,129,0.25); color: #27c281; }
+        .chain-dot-error    { background: rgba(255,107,107,0.12); border: 1px solid rgba(255,107,107,0.25); color: #ff6b6b; }
+        .chain-dot-other    { background: rgba(90,169,255,0.1);  border: 1px solid rgba(90,169,255,0.2);  color: #5aa9ff; }
+        .chain-body { flex: 1; min-width: 0; }
+        .chain-url {
+            font-family: "JetBrains Mono", "Fira Code", Menlo, monospace;
+            font-size: 12px; color: var(--text); word-break: break-all;
+            line-height: 1.5; margin-bottom: 3px;
+        }
+        .chain-meta { font-size: 12px; color: var(--muted); }
+
+        /* Info grid */
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        @media (max-width: 560px) { .info-grid { grid-template-columns: 1fr; } }
+        .info-cell {
+            padding: 14px 16px; border-radius: 12px;
+            background: rgba(10,15,30,0.5); border: 1px solid rgba(255,255,255,0.06);
+        }
+        .info-cell-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 6px; }
+        .info-cell-val { font-size: 13px; font-weight: 600; color: var(--text); word-break: break-all; }
+        .info-cell-val.good { color: var(--good); }
+        .info-cell-val.warn { color: var(--warn); }
+        .info-cell-val.bad  { color: var(--bad);  }
+
+        /* Badge */
+        .badge {
+            display: inline-block; padding: 2px 9px; border-radius: 5px;
+            font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+        }
+        .badge-good { background: rgba(39,194,129,0.14); color: #27c281; border: 1px solid rgba(39,194,129,0.25); }
+        .badge-warn { background: rgba(240,179,74,0.14); color: #f0b34a; border: 1px solid rgba(240,179,74,0.25); }
+        .badge-bad  { background: rgba(255,107,107,0.14); color: #ff6b6b; border: 1px solid rgba(255,107,107,0.25); }
+        .badge-muted{ background: rgba(149,163,191,0.1); color: var(--muted); border: 1px solid rgba(149,163,191,0.2); }
+
+        /* Loading */
+        .spinner {
+            display: inline-block; width: 18px; height: 18px; border-radius: 50%;
+            border: 2px solid rgba(90,169,255,0.25); border-top-color: var(--accent);
+            animation: spin 0.7s linear infinite; vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-row {
+            display: flex; align-items: center; gap: 12px; padding: 16px;
+            color: var(--muted); font-size: 14px;
+        }
+
+        /* Error */
+        .error-box {
+            padding: 14px 18px; border-radius: 12px;
+            background: rgba(255,107,107,0.08); border: 1px solid rgba(255,107,107,0.25);
+            color: var(--bad); font-size: 14px; line-height: 1.55;
+        }
+
+        .results-area { display: none; }
+        .results-area.visible { display: block; }
+
+        /* Section header */
+        .section-header {
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 14px;
+        }
+        .section-icon {
+            width: 32px; height: 32px; border-radius: 9px;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+
+        @media (max-width: 600px) {
+            .wrap { padding: 32px 16px 56px; }
+            .hero-title { font-size: 30px; }
+            .url-input-row { flex-direction: column; }
+            .score-row { flex-direction: column; align-items: stretch; }
+            .score-ring-wrap { flex-direction: row; align-items: center; }
+        }
+
+        /* Footer */
+        .footer { text-align: center; margin-top: 40px; font-size: 13px; color: rgba(149,163,191,0.4); }
+        .footer a { color: rgba(90,169,255,0.4); text-decoration: none; }
+        .footer a:hover { color: rgba(90,169,255,0.7); }
+
+        /* ── Badge popover ──────────────────────────────────────────────── */
+        .badge-wrap { position: relative; }
+        .topbar-badge { cursor: pointer; user-select: none; }
+        .badge-popover {
+            position: absolute; top: calc(100% + 10px); right: 0;
+            width: 260px;
+            background: rgba(11, 17, 35, 0.98);
+            border: 1px solid rgba(90,169,255,0.22);
+            border-radius: 12px; padding: 14px 16px;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.55);
+            z-index: 200; display: none;
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        }
+        .badge-popover.open { display: block; }
+        .badge-popover-text {
+            font-size: 13px; color: var(--muted); line-height: 1.55;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="topbar">
+        <a href="https://mailflowsentinel.com">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            All Tools
+        </a>
+        <div class="badge-wrap">
+            <span class="topbar-badge" id="badge-btn">URL Scanner</span>
+            <div class="badge-popover" id="badge-popover">
+                <p class="badge-popover-text">Analyze any URL for redirect chains, domain age, SSL validity, and Google Safe Browsing status. Get a risk score and plain English verdict.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="hero-title"><span>URL Scanner</span></div>
+    <div class="hero-sub">Follow redirect chains, verify SSL, check WHOIS registration age, run Google Safe Browsing, and get a plain-English risk verdict.</div>
+
+    <div class="card">
+        <div class="card-title">Enter URL to Scan</div>
+        <div class="url-input-row">
+            <input type="text" id="url-input" class="url-input"
+                placeholder="https://example.com/some/path"
+                spellcheck="false" autocomplete="off" autocapitalize="off">
+            <button class="btn-scan" id="scan-btn" onclick="runScan()">
+                Scan URL
+            </button>
+        </div>
+        <div class="examples-row">
+            <button class="example-chip" onclick="setExample('https://google.com')">google.com</button>
+            <button class="example-chip" onclick="setExample('https://github.com')">github.com</button>
+            <button class="example-chip" onclick="setExample('http://bit.ly/3example')">bit.ly shortlink</button>
+        </div>
+    </div>
+
+    <div id="loading" style="display:none;">
+        <div class="card">
+            <div class="loading-row">
+                <div class="spinner"></div>
+                <span>Scanning — following redirects, checking WHOIS, validating SSL…</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="error-area" style="display:none;">
+        <div class="card">
+            <div class="error-box" id="error-msg"></div>
+        </div>
+    </div>
+
+    <div class="results-area" id="results">
+
+        <!-- Risk Score -->
+        <div class="card">
+            <div class="card-title">Risk Score</div>
+            <div class="score-row">
+                <div class="score-ring-wrap">
+                    <div class="score-ring">
+                        <svg width="96" height="96" viewBox="0 0 96 96">
+                            <circle cx="48" cy="48" r="40" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="8"/>
+                            <circle id="score-arc" cx="48" cy="48" r="40" fill="none"
+                                stroke="#27c281" stroke-width="8"
+                                stroke-dasharray="251.2" stroke-dashoffset="251.2"
+                                stroke-linecap="round"/>
+                        </svg>
+                        <div class="score-ring-val" id="score-val">0</div>
+                    </div>
+                    <div class="score-ring-label">Risk Score</div>
+                </div>
+                <div class="score-verdict-area">
+                    <div class="verdict-text" id="verdict-text">—</div>
+                    <div class="verdict-sub" id="verdict-url"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Risk Factors -->
+        <div class="card" id="factors-card">
+            <div class="card-title">Risk Factors</div>
+            <div id="factors-list"></div>
+        </div>
+
+        <!-- Redirect Chain -->
+        <div class="card">
+            <div class="card-title">Redirect Chain</div>
+            <div class="chain-list" id="chain-list"></div>
+        </div>
+
+        <!-- Two-column: WHOIS + SSL -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px;" id="meta-grid">
+            <div class="card" style="margin-bottom:0">
+                <div class="card-title">Domain Registration</div>
+                <div class="info-grid" id="whois-grid"></div>
+            </div>
+            <div class="card" style="margin-bottom:0">
+                <div class="card-title">SSL Certificate</div>
+                <div class="info-grid" id="ssl-grid"></div>
+            </div>
+        </div>
+
+        <!-- Google Safe Browsing -->
+        <div class="card" style="margin-top:18px">
+            <div class="card-title">Google Safe Browsing</div>
+            <div id="gsb-result"></div>
+        </div>
+
+    </div>
+
+        <div class="footer">
+        Reboot Labs &nbsp;&middot;&nbsp; Siirila &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com">mailflowsentinel.com</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/dmarc-analyzer.html">DMARC</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/spf-fix.html">SPF</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/email-header-analyzer.html">Headers</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/dkim-analyzer.html">DKIM</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/url-scanner.html">URL Scanner</a>
+    </div>
+</div>
+
+<script>
+const API = 'https://mailflowsentinel.com/scan-url';
+
+function setExample(url) {
+    document.getElementById('url-input').value = url;
+    document.getElementById('url-input').focus();
+}
+
+document.getElementById('url-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') runScan();
+});
+
+function scoreColor(score) {
+    if (score >= 75) return '#ff6b6b';
+    if (score >= 50) return '#ff8c32';
+    if (score >= 25) return '#f0b34a';
+    if (score >= 10) return '#5aa9ff';
+    return '#27c281';
+}
+
+function cell(label, val, cls) {
+    return `<div class="info-cell">
+        <div class="info-cell-label">${label}</div>
+        <div class="info-cell-val${cls ? ' '+cls : ''}">${val}</div>
+    </div>`;
+}
+
+function statusDot(code) {
+    if (!code) return 'chain-dot-error';
+    if (code >= 300 && code < 400) return 'chain-dot-redirect';
+    if (code >= 200 && code < 300) return 'chain-dot-final';
+    return 'chain-dot-other';
+}
+
+async function runScan() {
+    let url = document.getElementById('url-input').value.trim();
+    if (!url) return;
+
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('error-area').style.display = 'none';
+    document.getElementById('results').classList.remove('visible');
+    document.getElementById('scan-btn').disabled = true;
+
+    try {
+        const resp = await fetch(`${API}?url=${encodeURIComponent(url)}`);
+        const data = await resp.json();
+
+        if (!resp.ok) {
+            throw new Error(data.detail || `Server error ${resp.status}`);
+        }
+
+        renderResults(data);
+        document.getElementById('results').classList.add('visible');
+    } catch(e) {
+        document.getElementById('error-msg').textContent = 'Scan failed: ' + e.message;
+        document.getElementById('error-area').style.display = 'block';
+    } finally {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('scan-btn').disabled = false;
+    }
+}
+
+function renderResults(d) {
+    // Score ring
+    const score = d.risk_score;
+    const color = scoreColor(score);
+    const circ = 251.2;
+    const offset = circ - (score / 100) * circ;
+    const arc = document.getElementById('score-arc');
+    arc.style.stroke = color;
+    arc.setAttribute('stroke-dashoffset', offset);
+    document.getElementById('score-val').textContent = score;
+    document.getElementById('score-val').style.color = color;
+
+    // Verdict
+    document.getElementById('verdict-text').textContent = d.verdict;
+    document.getElementById('verdict-url').textContent = 'Final destination: ' + (d.final_domain || d.final_url);
+
+    // Risk factors
+    const fl = document.getElementById('factors-list');
+    if (!d.risk_factors || d.risk_factors.length === 0) {
+        fl.innerHTML = `<div class="clean-notice">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <circle cx="9" cy="9" r="8" stroke="#27c281" stroke-width="1.6"/>
+                <path d="M5.5 9l2.5 2.5 4.5-5" stroke="#27c281" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            No risk factors detected.
+        </div>`;
+    } else {
+        fl.innerHTML = `<div class="factors-list">${d.risk_factors.map(f => `
+            <div class="factor-item">
+                <div class="factor-icon">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M8 2l6 11H2L8 2z" stroke="#f0b34a" stroke-width="1.5" stroke-linejoin="round"/>
+                        <path d="M8 7v3M8 11.5v.5" stroke="#f0b34a" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <span>${escHtml(f)}</span>
+            </div>`).join('')}
+        </div>`;
+    }
+
+    // Redirect chain
+    const cl = document.getElementById('chain-list');
+    if (!d.chain || d.chain.length === 0) {
+        cl.innerHTML = '<div style="color:var(--muted);font-size:13px">No redirect chain data.</div>';
+    } else {
+        cl.innerHTML = d.chain.map((hop, i) => {
+            const isLast = i === d.chain.length - 1;
+            const dotClass = hop.error ? 'chain-dot-error' : (isLast ? 'chain-dot-final' : statusDot(hop.status_code));
+            const codeLabel = hop.error ? hop.error : (hop.status_code || '—');
+            const codeDesc = hop.error ? '' : httpDesc(hop.status_code);
+            return `<div class="chain-hop">
+                <div class="chain-dot ${dotClass}">${codeLabel}</div>
+                <div class="chain-body">
+                    <div class="chain-url">${escHtml(hop.url)}</div>
+                    <div class="chain-meta">${isLast && !hop.error ? 'Final destination' : codeDesc}</div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    // WHOIS
+    const wg = document.getElementById('whois-grid');
+    const w = d.whois || {};
+    const ageDays = w.age_days;
+    let ageClass = '';
+    let ageDisplay = ageDays != null ? ageDays + ' days' : '—';
+    if (ageDays != null) {
+        if (ageDays < 30) ageClass = 'bad';
+        else if (ageDays < 365) ageClass = 'warn';
+        else ageClass = 'good';
+    }
+    wg.innerHTML =
+        cell('Registrar', escHtml(w.registrar || '—'), '') +
+        cell('Domain Age', ageDisplay, ageClass) +
+        cell('Registered', escHtml(w.created || '—'), '') +
+        cell('Expires', escHtml(w.expires || '—'), '');
+    if (w.error) {
+        wg.innerHTML += `<div style="grid-column:1/-1;font-size:12px;color:var(--muted);margin-top:6px">Note: ${escHtml(w.error)}</div>`;
+    }
+
+    // SSL
+    const sg = document.getElementById('ssl-grid');
+    const s = d.ssl || {};
+    if (!s.valid) {
+        sg.innerHTML =
+            cell('Status', 'Invalid', 'bad') +
+            cell('Error', escHtml(s.error || 'Unknown'), 'bad');
+    } else {
+        const daysLeft = s.days_remaining;
+        let daysClass = 'good';
+        if (s.expired) daysClass = 'bad';
+        else if (daysLeft < 30) daysClass = 'warn';
+        sg.innerHTML =
+            cell('Status', s.expired ? 'Expired' : 'Valid', s.expired ? 'bad' : 'good') +
+            cell('Issuer', escHtml(s.issuer || '—'), '') +
+            cell('Expires', escHtml(s.not_after || '—'), daysClass) +
+            cell('Days Left', s.expired ? 'Expired' : (daysLeft + ' days'), daysClass);
+    }
+
+    // Meta grid responsiveness
+    if (window.innerWidth < 600) {
+        document.getElementById('meta-grid').style.gridTemplateColumns = '1fr';
+    }
+
+    // GSB
+    const gr = document.getElementById('gsb-result');
+    const gsb = d.gsb || {};
+    if (gsb.status === 'not_configured') {
+        gr.innerHTML = `<div style="color:var(--muted);font-size:13px;display:flex;align-items:center;gap:8px">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v4M8 10.5v.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            Google Safe Browsing API key not configured. Add <code style="font-family:monospace;background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:4px">GOOGLE_SAFE_BROWSING_KEY</code> to the server environment to enable this check.
+        </div>`;
+    } else if (gsb.status === 'threat') {
+        const threats = (gsb.threats || []).join(', ');
+        gr.innerHTML = `<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:10px;background:rgba(255,107,107,0.08);border:1px solid rgba(255,107,107,0.25)">
+            <svg style="flex-shrink:0;margin-top:1px" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2l7 13H2L9 2z" stroke="#ff6b6b" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 8v3M9 12.5v.5" stroke="#ff6b6b" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <div><div style="font-size:14px;font-weight:700;color:#ff6b6b;margin-bottom:4px">Threat detected</div>
+            <div style="font-size:13px;color:var(--muted)">${escHtml(threats)}</div></div>
+        </div>`;
+    } else if (gsb.status === 'clean') {
+        gr.innerHTML = `<div style="display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:var(--good);padding:12px 14px;border-radius:10px;background:rgba(39,194,129,0.08);border:1px solid rgba(39,194,129,0.2)">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7.5" stroke="#27c281" stroke-width="1.6"/><path d="M5.5 9l2.5 2.5 4.5-5" stroke="#27c281" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            No threats detected by Google Safe Browsing.
+        </div>`;
+    } else {
+        gr.innerHTML = `<div style="color:var(--muted);font-size:13px">Safe Browsing check returned: ${escHtml(gsb.status || 'unknown')}${gsb.error ? ' — ' + escHtml(gsb.error) : ''}</div>`;
+    }
+}
+
+function httpDesc(code) {
+    const map = {301:'Moved Permanently',302:'Found (Temporary Redirect)',303:'See Other',307:'Temporary Redirect',308:'Permanent Redirect',200:'OK',404:'Not Found',403:'Forbidden',500:'Server Error'};
+    return map[code] || (code ? 'HTTP ' + code : '');
+}
+
+function escHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+<script>(function(){var b=document.getElementById("badge-btn"),p=document.getElementById("badge-popover");if(!b||!p)return;function c(){p.classList.remove("open")}b.addEventListener("click",function(e){e.stopPropagation();p.classList.toggle("open")});document.addEventListener("click",c);document.addEventListener("keydown",function(e){if(e.key==="Escape")c()});})();</script>
+</body>
+</html>

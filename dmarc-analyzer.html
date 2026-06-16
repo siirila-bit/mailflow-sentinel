@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DMARC Record Analyzer — Reboot Labs</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230b1020'/><path d='M4 10l12 9 12-9' stroke='%235aa9ff' stroke-width='2' fill='none' stroke-linecap='round'/><rect x='4' y='10' width='24' height='16' rx='2' stroke='%235aa9ff' stroke-width='2' fill='none'/></svg>">
+    <style>
+        :root {
+            --bg: #0b1020;
+            --panel: rgba(18, 25, 45, 0.78);
+            --text: #e8edf7;
+            --muted: #95a3bf;
+            --border: rgba(255,255,255,0.08);
+            --accent: #5aa9ff;
+            --accent-2: #7c5cff;
+            --good: #27c281;
+            --warn: #f0b34a;
+            --bad: #ff6b6b;
+            --shadow: 0 18px 50px rgba(0,0,0,0.35);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(90,169,255,0.14), transparent 28%),
+                radial-gradient(circle at top right, rgba(124,92,255,0.14), transparent 30%),
+                linear-gradient(180deg, #09101c 0%, #0b1020 100%);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        .wrap { max-width: 860px; margin: 0 auto; padding: 48px 24px 80px; }
+
+        .topbar {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 44px;
+        }
+        .topbar a {
+            display: inline-flex; align-items: center; gap: 7px;
+            font-size: 13px; font-weight: 600; color: var(--muted);
+            text-decoration: none; transition: color 0.15s;
+        }
+        .topbar a:hover { color: var(--accent); }
+        .topbar-badge {
+            font-size: 13px; font-weight: 600; color: var(--accent);
+            padding: 6px 14px; border-radius: 8px;
+            border: 1px solid rgba(90,169,255,0.3);
+            background: rgba(90,169,255,0.06);
+        }
+
+        .hero-title {
+            font-size: 38px; font-weight: 800; letter-spacing: -0.03em;
+            line-height: 1.08; margin-bottom: 10px;
+        }
+        .hero-title span {
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hero-sub {
+            font-size: 16px; color: var(--muted); line-height: 1.55;
+            margin-bottom: 36px; max-width: 600px;
+        }
+
+        .card {
+            background: var(--panel);
+            backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            border-radius: 20px; padding: 26px 30px; margin-bottom: 18px;
+        }
+        .card-title {
+            font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--accent); margin-bottom: 18px;
+        }
+
+        .record-textarea {
+            width: 100%; min-height: 90px; resize: vertical;
+            background: rgba(10,15,30,0.7); border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 12px; padding: 14px 16px;
+            font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", Menlo, monospace;
+            font-size: 13.5px; color: var(--text); line-height: 1.6;
+            outline: none; transition: border-color 0.2s;
+        }
+        .record-textarea:focus { border-color: rgba(90,169,255,0.45); }
+        .record-textarea::placeholder { color: rgba(149,163,191,0.4); }
+
+        .examples-row {
+            display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px;
+        }
+        .example-chip {
+            font-size: 11px; font-weight: 600; padding: 5px 12px; border-radius: 7px;
+            border: 1px solid var(--border); background: rgba(255,255,255,0.04);
+            color: var(--muted); cursor: pointer; transition: all 0.15s;
+            font-family: inherit;
+        }
+        .example-chip:hover { border-color: rgba(90,169,255,0.3); color: var(--accent); background: rgba(90,169,255,0.06); }
+
+        .btn-row { display: flex; gap: 10px; margin-top: 14px; }
+        .btn-analyze {
+            padding: 11px 24px; border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            color: #fff; font-weight: 700; font-size: 14px;
+            border: none; cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+            font-family: inherit;
+        }
+        .btn-analyze:hover { opacity: 0.88; transform: translateY(-1px); }
+        .btn-analyze:active { transform: translateY(0); }
+        .btn-clear {
+            padding: 11px 18px; border-radius: 10px;
+            background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+            color: var(--muted); font-weight: 600; font-size: 14px;
+            cursor: pointer; transition: background 0.15s; font-family: inherit;
+        }
+        .btn-clear:hover { background: rgba(255,255,255,0.1); }
+
+        .score-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+        @media (max-width: 560px) { .score-row { grid-template-columns: 1fr 1fr; } }
+        .score-card {
+            background: var(--panel); backdrop-filter: blur(14px);
+            border: 1px solid var(--border); box-shadow: var(--shadow);
+            border-radius: 20px; padding: 22px 24px; text-align: center;
+        }
+        .score-num {
+            font-size: 52px; font-weight: 900; line-height: 1;
+            letter-spacing: -0.04em; margin-bottom: 6px;
+        }
+        .score-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+        .score-sublabel { font-size: 14px; font-weight: 600; margin-top: 4px; }
+
+        .badge {
+            display: inline-block; padding: 2px 9px; border-radius: 5px;
+            font-size: 10px; font-weight: 700; letter-spacing: 0.07em;
+            text-transform: uppercase;
+        }
+        .badge-critical { background: rgba(255,107,107,0.18); color: #ff6b6b; border: 1px solid rgba(255,107,107,0.3); }
+        .badge-high     { background: rgba(255,140,50,0.18);  color: #ff8c32; border: 1px solid rgba(255,140,50,0.3); }
+        .badge-medium   { background: rgba(240,179,74,0.18);  color: #f0b34a; border: 1px solid rgba(240,179,74,0.3); }
+        .badge-low      { background: rgba(90,169,255,0.14);  color: #5aa9ff; border: 1px solid rgba(90,169,255,0.25); }
+        .badge-good     { background: rgba(39,194,129,0.14);  color: #27c281; border: 1px solid rgba(39,194,129,0.25); }
+        .badge-info     { background: rgba(149,163,191,0.12); color: #95a3bf; border: 1px solid rgba(149,163,191,0.2); }
+
+        .token-list { display: flex; flex-direction: column; gap: 10px; }
+        .token-item {
+            display: grid; grid-template-columns: minmax(0, 220px) 1fr;
+            align-items: start; gap: 14px;
+            background: rgba(10,15,30,0.5); border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 12px; padding: 12px 16px;
+        }
+        .token-raw {
+            font-family: "JetBrains Mono", "Fira Code", Menlo, monospace;
+            font-size: 12.5px; font-weight: 600;
+            padding: 3px 10px; border-radius: 6px;
+            white-space: normal; word-break: break-all; align-self: start;
+        }
+        .token-body { min-width: 0; overflow-wrap: break-word; }
+        .token-mech { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 3px; }
+        .token-desc { font-size: 13px; color: var(--muted); line-height: 1.5; }
+        @media (max-width: 600px) {
+            .token-item { grid-template-columns: 1fr; }
+        }
+
+        .tok-version  { background: rgba(149,163,191,0.1); color: var(--muted);  border: 1px solid rgba(149,163,191,0.2); }
+        .tok-good     { background: rgba(39,194,129,0.1);  color: #27c281;       border: 1px solid rgba(39,194,129,0.2); }
+        .tok-warn     { background: rgba(240,179,74,0.12); color: #f0b34a;       border: 1px solid rgba(240,179,74,0.25); }
+        .tok-bad      { background: rgba(255,107,107,0.12); color: #ff6b6b;      border: 1px solid rgba(255,107,107,0.25); }
+        .tok-neutral  { background: rgba(90,169,255,0.1);  color: var(--accent); border: 1px solid rgba(90,169,255,0.2); }
+        .tok-critical { background: rgba(255,107,107,0.18); color: #ff6b6b;      border: 1px solid rgba(255,107,107,0.4); }
+        .tok-missing  { background: rgba(149,163,191,0.06); color: rgba(149,163,191,0.5); border: 1px solid rgba(149,163,191,0.12); font-style: italic; }
+
+        .issue-list { display: flex; flex-direction: column; gap: 12px; }
+        .issue-item { display: flex; gap: 12px; align-items: flex-start; }
+        .issue-body { min-width: 0; }
+        .issue-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+        .issue-detail { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+        .fix-list { display: flex; flex-direction: column; gap: 14px; }
+        .fix-item { display: flex; gap: 14px; align-items: flex-start; }
+        .fix-num {
+            flex-shrink: 0; width: 26px; height: 26px;
+            border-radius: 8px; background: rgba(90,169,255,0.12);
+            border: 1px solid rgba(90,169,255,0.22);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 700; color: var(--accent); margin-top: 1px;
+        }
+        .fix-body { min-width: 0; }
+        .fix-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+        .fix-detail { font-size: 13px; color: var(--muted); line-height: 1.55; }
+
+        .corrected-box {
+            background: rgba(10,15,30,0.7); border: 1px solid rgba(39,194,129,0.2);
+            border-radius: 12px; padding: 16px 18px; margin-bottom: 14px;
+            font-family: "JetBrains Mono", "Fira Code", Menlo, monospace;
+            font-size: 13px; color: var(--text); line-height: 1.6;
+            word-break: break-all;
+        }
+        .corrected-box span.tok-added   { color: #27c281; }
+        .corrected-box span.tok-changed { color: #f0b34a; }
+        .corrected-box span.tok-kept    { color: var(--text); }
+
+        .btn-copy {
+            display: inline-flex; align-items: center; gap: 7px;
+            padding: 9px 18px; border-radius: 9px;
+            background: rgba(39,194,129,0.12); border: 1px solid rgba(39,194,129,0.25);
+            color: #27c281; font-weight: 600; font-size: 13px;
+            cursor: pointer; transition: background 0.15s; font-family: inherit;
+        }
+        .btn-copy:hover { background: rgba(39,194,129,0.2); }
+
+        .changes-list { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+        .change-item {
+            font-size: 12.5px; color: var(--muted); display: flex;
+            align-items: flex-start; gap: 8px; line-height: 1.5;
+        }
+        .change-dot {
+            width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 5px;
+        }
+        .change-dot-add    { background: #27c281; }
+        .change-dot-change { background: #f0b34a; }
+        .change-dot-remove { background: #ff6b6b; }
+
+        .cta-card {
+            background: linear-gradient(135deg, rgba(90,169,255,0.08), rgba(124,92,255,0.08));
+            border: 1px solid rgba(90,169,255,0.18);
+        }
+        .cta-card p { font-size: 15px; color: var(--muted); line-height: 1.6; margin-bottom: 18px; }
+        .cta-link {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 12px 22px; border-radius: 12px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            color: #fff; font-weight: 700; font-size: 14px;
+            text-decoration: none; transition: opacity 0.2s, transform 0.1s;
+            box-shadow: 0 8px 22px rgba(92,122,255,0.28);
+        }
+        .cta-link:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        .hidden { display: none; }
+
+        .footer { text-align: center; padding: 28px 0 0; color: rgba(149,163,191,0.35); font-size: 12px; }
+        .footer a { color: rgba(90,169,255,0.4); text-decoration: none; }
+        .footer a:hover { color: rgba(90,169,255,0.7); }
+
+        code {
+            font-family: "JetBrains Mono", Menlo, monospace;
+            font-size: 12px; background: rgba(90,169,255,0.08);
+            border: 1px solid rgba(90,169,255,0.15); border-radius: 4px; padding: 1px 6px;
+            color: var(--accent);
+        }
+    
+        /* ── Badge popover ──────────────────────────────────────────────── */
+        .badge-wrap { position: relative; }
+        .topbar-badge { cursor: pointer; user-select: none; }
+        .badge-popover {
+            position: absolute; top: calc(100% + 10px); right: 0;
+            width: 260px;
+            background: rgba(11, 17, 35, 0.98);
+            border: 1px solid rgba(90,169,255,0.22);
+            border-radius: 12px; padding: 14px 16px;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.55);
+            z-index: 200; display: none;
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        }
+        .badge-popover.open { display: block; }
+        .badge-popover-text {
+            font-size: 13px; color: var(--muted); line-height: 1.55;
+            margin: 0 0 12px;
+        }
+        .badge-popover-link {
+            display: inline-flex; align-items: center; gap: 5px;
+            font-size: 12px; font-weight: 700; color: var(--accent);
+            text-decoration: none;
+        }
+        .badge-popover-link svg { transition: transform 0.15s; }
+        .badge-popover-link:hover svg { transform: translateX(2px); }
+    </style>
+</head>
+<body>
+<div class="wrap">
+
+    <div class="topbar">
+        <a href="https://mailflowsentinel.com">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            mailflowsentinel.com
+        </a>
+        <div class="badge-wrap">
+        <span class="topbar-badge" id="badge-btn">DMARC Analyzer</span>
+        <div class="badge-popover" id="badge-popover">
+            <p class="badge-popover-text">Paste any DMARC record for a tag-by-tag breakdown, a score out of 100, identified issues by severity, and a corrected record ready to deploy.</p>        </div>
+    </div>
+    </div>
+
+    <h1 class="hero-title"><span>DMARC</span> Record Analyzer</h1>
+    <p class="hero-sub">Paste any DMARC record for a tag-by-tag breakdown, plain English explanation of every field, a score out of 100, and a hardened record ready to deploy.</p>
+
+    <div class="card">
+        <div class="card-title">Your DMARC Record</div>
+        <textarea
+            id="record-input"
+            class="record-textarea"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="v=DMARC1; p=reject; pct=100; rua=mailto:dmarc@example.com; adkim=r; aspf=r"
+        ></textarea>
+        <div class="examples-row">
+            <span style="font-size:11px;font-weight:600;color:var(--muted);align-self:center;margin-right:2px;">Try:</span>
+            <button class="example-chip" onclick="loadExample(0)">p=none, no reporting</button>
+            <button class="example-chip" onclick="loadExample(1)">quarantine, pct=25</button>
+            <button class="example-chip" onclick="loadExample(2)">reject, sp=none</button>
+            <button class="example-chip" onclick="loadExample(3)">well configured</button>
+        </div>
+        <div class="btn-row">
+            <button class="btn-analyze" onclick="runAnalysis()">Analyze Record</button>
+            <button class="btn-clear" onclick="clearAll()">Clear</button>
+        </div>
+    </div>
+
+    <div id="results" class="hidden">
+
+        <p id="verdict" style="font-size:16px;font-weight:600;line-height:1.55;margin-bottom:18px;padding:14px 18px 14px 20px;background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--border);border-left:3px solid var(--muted);border-radius:14px;"></p>
+
+        <div class="score-row">
+            <div class="score-card">
+                <div id="score-num" class="score-num">—</div>
+                <div class="score-label">Score / 100</div>
+                <div id="score-sublabel" class="score-sublabel">—</div>
+            </div>
+            <div class="score-card">
+                <div id="policy-val" class="score-num" style="font-size:28px;font-family:'JetBrains Mono',Menlo,monospace;">—</div>
+                <div class="score-label">Policy (p=)</div>
+                <div id="policy-sublabel" class="score-sublabel">—</div>
+            </div>
+            <div class="score-card">
+                <div id="pct-val" class="score-num" style="font-size:38px;">—</div>
+                <div class="score-label">Coverage (pct=)</div>
+                <div id="pct-sublabel" class="score-sublabel">—</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Tag Breakdown</div>
+            <div id="token-list" class="token-list"></div>
+        </div>
+
+        <div id="issues-card" class="card hidden">
+            <div class="card-title">Issues Found</div>
+            <div id="issue-list" class="issue-list"></div>
+        </div>
+
+        <div id="fixes-card" class="card hidden">
+            <div class="card-title">Recommended Fixes</div>
+            <div id="fix-list" class="fix-list"></div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Hardened Record</div>
+            <div id="corrected-box" class="corrected-box"></div>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                <button class="btn-copy" onclick="copyRecord()" id="copy-btn">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    Copy Record
+                </button>
+                <span id="copy-confirm" class="hidden" style="font-size:12px;color:var(--good);font-weight:600;">Copied to clipboard</span>
+            </div>
+            <div id="changes-list" class="changes-list"></div>
+        </div>
+
+        <div class="card cta-card">
+            <div class="card-title">See How Your Domain Looks to Attackers</div>
+            <p>This tool analyzes records you paste. For a live scan — recursive SPF lookup counting, DMARC enforcement state, DKIM key detection, direct send exposure, and open relay testing — run a real-time check on any domain.</p>
+            <a href="https://mailflowsentinel.com" class="cta-link" target="_blank" rel="noopener">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                Open MailFlow Sentinel
+            </a>
+        </div>
+
+    </div><!-- /results -->
+
+        <div class="footer">
+        Reboot Labs &nbsp;&middot;&nbsp; Siirila &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com">mailflowsentinel.com</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/dmarc-analyzer.html">DMARC</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/spf-fix.html">SPF</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/email-header-analyzer.html">Headers</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/dkim-analyzer.html">DKIM</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://mailflowsentinel.com/url-scanner.html">URL Scanner</a>
+    </div>
+
+</div><!-- /wrap -->
+
+<script>
+// ─── Example records ──────────────────────────────────────────────────────────
+const EXAMPLES = [
+    'v=DMARC1; p=none',
+    'v=DMARC1; p=quarantine; pct=25; rua=mailto:dmarc@example.com',
+    'v=DMARC1; p=reject; sp=none; rua=mailto:dmarc@example.com; adkim=r; aspf=r',
+    'v=DMARC1; p=reject; pct=100; rua=mailto:dmarc@example.com; ruf=mailto:dmarc-ruf@example.com; adkim=r; aspf=r; fo=1',
+];
+
+function loadExample(idx) {
+    document.getElementById('record-input').value = EXAMPLES[idx];
+    runAnalysis();
+}
+
+// ─── DMARC Parser ─────────────────────────────────────────────────────────────
+function parseDMARC(record) {
+    const text = record.trim();
+    // Strip surrounding quotes
+    const stripped = text.replace(/^["']|["']$/g, '').trim();
+
+    // Split on semicolons, filter empty
+    const rawTags = stripped.split(/\s*;\s*/).filter(t => t.trim().length > 0);
+
+    const tags = {};
+    const tagOrder = [];
+
+    for (const raw of rawTags) {
+        const eqIdx = raw.indexOf('=');
+        if (eqIdx === -1) continue;
+        const key = raw.slice(0, eqIdx).trim().toLowerCase();
+        const val = raw.slice(eqIdx + 1).trim();
+        tags[key] = val;
+        tagOrder.push({ key, val, raw: raw.trim() });
+    }
+
+    return { tags, tagOrder, raw: stripped };
+}
+
+function analyzeDMARC(record) {
+    if (!record.trim()) return null;
+
+    const { tags, tagOrder, raw } = parseDMARC(record);
+
+    // Must start with v=DMARC1
+    if (!raw.toLowerCase().startsWith('v=dmarc1')) {
+        return {
+            valid: false,
+            error: 'Record must begin with v=DMARC1. This does not appear to be a valid DMARC record.',
+            tagOrder: [], tags: {}, issues: [], score: 0,
+            corrected: { record: '', changes: [] }
+        };
+    }
+
+    const issues = [];
+    let score = 100;
+
+    // p= tag
+    const p = (tags['p'] || '').toLowerCase();
+    const validPolicies = ['none', 'quarantine', 'reject'];
+
+    if (!tags['p']) {
+        score -= 40;
+        issues.push({
+            severity: 'critical',
+            title: 'Missing required p= tag — DMARC policy is undefined',
+            detail: 'The p= tag is required and tells receivers what to do with mail that fails DMARC. Without it, the record is invalid and receivers will ignore it entirely.',
+            fix: 'Add p=quarantine or p=reject',
+        });
+    } else if (!validPolicies.includes(p)) {
+        score -= 30;
+        issues.push({
+            severity: 'critical',
+            title: `Invalid policy value: p=${tags['p']}`,
+            detail: 'The p= tag must be one of: none, quarantine, or reject. An unrecognized value makes the record invalid.',
+            fix: 'Set p=quarantine or p=reject',
+        });
+    } else if (p === 'none') {
+        score -= 40;
+        issues.push({
+            severity: 'critical',
+            title: 'Policy is p=none — DMARC provides zero enforcement',
+            detail: 'p=none instructs receivers to take no action on mail that fails DMARC. It is appropriate only during initial monitoring. Leaving it at none indefinitely means spoofed mail is delivered just like legitimate mail.',
+            fix: 'Advance to p=quarantine, then p=reject once you have confirmed your mail flow in aggregate reports',
+        });
+    } else if (p === 'quarantine') {
+        score -= 15;
+        issues.push({
+            severity: 'high',
+            title: 'Policy is p=quarantine — failing mail goes to spam, not rejected',
+            detail: 'Quarantine sends DMARC-failing messages to the spam/junk folder. It is better than none, but still allows spoofed mail to reach recipients. p=reject is the only policy that fully blocks unauthorized senders.',
+            fix: 'Advance to p=reject once you have confirmed all legitimate senders are covered',
+        });
+    }
+
+    // pct=
+    const pctRaw = tags['pct'];
+    const pct = pctRaw !== undefined ? parseInt(pctRaw, 10) : 100;
+    if (pctRaw !== undefined && (isNaN(pct) || pct < 0 || pct > 100)) {
+        score -= 5;
+        issues.push({
+            severity: 'medium',
+            title: `Invalid pct= value: ${pctRaw}`,
+            detail: 'pct= must be an integer between 0 and 100. An invalid value may cause receivers to ignore the tag entirely.',
+            fix: 'Set pct=100 to apply the policy to all mail',
+        });
+    } else if (pct < 100) {
+        const deduction = pct <= 10 ? 15 : pct <= 50 ? 10 : 5;
+        score -= deduction;
+        issues.push({
+            severity: pct <= 10 ? 'high' : 'medium',
+            title: `pct=${pct} — policy applies to only ${pct}% of failing mail`,
+            detail: `The pct= tag limits policy enforcement to a percentage of messages. At ${pct}%, ${100 - pct}% of DMARC-failing mail — including spoofed messages — bypasses your policy and may be delivered normally. This is useful during rollout but should not be left below 100.`,
+            fix: 'Set pct=100 or remove the tag (100 is the default) once rollout is complete',
+        });
+    }
+
+    // rua=
+    if (!tags['rua']) {
+        score -= 10;
+        issues.push({
+            severity: 'medium',
+            title: 'Missing rua= — no aggregate reports will be sent',
+            detail: 'Aggregate reports (rua=) are daily XML summaries showing which servers sent mail using your domain, and whether it passed DMARC. Without them you have no visibility into your mail flow or into spoofing attempts against your domain.',
+            fix: 'Add rua=mailto:dmarc@yourdomain.com or use a DMARC reporting service',
+        });
+    }
+
+    // sp=
+    const sp = (tags['sp'] || '').toLowerCase();
+    if (tags['sp'] && !validPolicies.includes(sp)) {
+        issues.push({
+            severity: 'medium',
+            title: `Invalid sp= value: ${tags['sp']}`,
+            detail: 'sp= must be none, quarantine, or reject if specified.',
+            fix: `Remove sp= or set it to a valid value`,
+        });
+    } else if (sp === 'none' && (p === 'quarantine' || p === 'reject')) {
+        score -= 10;
+        issues.push({
+            severity: 'high',
+            title: 'sp=none leaves subdomains completely unprotected',
+            detail: `Your domain policy is p=${p}, but sp=none means all subdomains (mail.yourdomain.com, marketing.yourdomain.com, etc.) have no DMARC protection. Attackers can send spoofed mail from any subdomain without restriction.`,
+            fix: `Remove sp= to inherit p=${p}, or set sp=quarantine / sp=reject explicitly`,
+        });
+    }
+
+    // adkim=
+    const adkim = (tags['adkim'] || 'r').toLowerCase();
+    if (tags['adkim'] && adkim !== 'r' && adkim !== 's') {
+        issues.push({
+            severity: 'low',
+            title: `Invalid adkim= value: ${tags['adkim']}`,
+            detail: 'adkim= must be r (relaxed) or s (strict).',
+            fix: 'Set adkim=r (relaxed, recommended) or adkim=s (strict)',
+        });
+    }
+
+    // aspf=
+    const aspf = (tags['aspf'] || 'r').toLowerCase();
+    if (tags['aspf'] && aspf !== 'r' && aspf !== 's') {
+        issues.push({
+            severity: 'low',
+            title: `Invalid aspf= value: ${tags['aspf']}`,
+            detail: 'aspf= must be r (relaxed) or s (strict).',
+            fix: 'Set aspf=r (relaxed, recommended) or aspf=s (strict)',
+        });
+    }
+
+    // fo=
+    const fo = tags['fo'];
+    if (fo !== undefined) {
+        const validFo = /^[01ds](:[01ds])*$/.test(fo);
+        if (!validFo) {
+            issues.push({
+                severity: 'low',
+                title: `Unrecognized fo= value: ${fo}`,
+                detail: 'fo= accepts values 0, 1, d, s (colon-separated for multiple). fo=0 reports only when all mechanisms fail; fo=1 reports when any mechanism fails.',
+                fix: 'Use fo=1 for maximum visibility, or fo=0 for the default behavior',
+            });
+        }
+    }
+
+    // ri=
+    const ri = tags['ri'];
+    if (ri !== undefined) {
+        const riNum = parseInt(ri, 10);
+        if (isNaN(riNum) || riNum < 0) {
+            issues.push({
+                severity: 'low',
+                title: `Invalid ri= value: ${ri}`,
+                detail: 'ri= must be a positive integer specifying the report interval in seconds. The default is 86400 (24 hours).',
+                fix: 'Remove ri= to use the default (86400) or set a valid integer',
+            });
+        }
+    }
+
+    // Unknown tags
+    const knownTags = new Set(['v', 'p', 'sp', 'pct', 'rua', 'ruf', 'adkim', 'aspf', 'fo', 'ri', 'rf']);
+    for (const { key } of tagOrder) {
+        if (!knownTags.has(key)) {
+            issues.push({
+                severity: 'low',
+                title: `Unknown tag: ${key}=`,
+                detail: `"${key}" is not a recognized DMARC tag and will be ignored by receivers. This may be a typo.`,
+                fix: `Remove the unknown tag "${key}="`,
+            });
+        }
+    }
+
+    score = Math.max(0, score);
+
+    const sevOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+    issues.sort((a, b) => sevOrder[a.severity] - sevOrder[b.severity]);
+
+    const corrected = buildCorrected(tags, tagOrder, p, pct, sp);
+
+    return {
+        valid: true,
+        tags,
+        tagOrder,
+        issues,
+        score,
+        pct,
+        corrected,
+    };
+}
+
+function buildCorrected(tags, tagOrder, p, pct, sp) {
+    const changes = [];
+    const parts = ['v=DMARC1'];
+
+    // Determine target policy
+    let targetP = p;
+    if (!p || !['none','quarantine','reject'].includes(p)) {
+        targetP = 'quarantine';
+        changes.push({ type: 'add', raw: 'p=quarantine', reason: 'Added missing required p= tag (set to quarantine as a safe starting point)' });
+    } else if (p === 'none') {
+        targetP = 'quarantine';
+        changes.push({ type: 'change', from: 'p=none', to: 'p=quarantine', reason: 'Hardened from p=none (monitoring only) to p=quarantine' });
+    }
+    parts.push(`p=${targetP}`);
+
+    // sp= — remove if it's none with a real policy, otherwise keep if valid
+    if (tags['sp']) {
+        const spLow = tags['sp'].toLowerCase();
+        if (spLow === 'none' && (targetP === 'quarantine' || targetP === 'reject')) {
+            changes.push({ type: 'remove', raw: `sp=${tags['sp']}`, reason: 'Removed sp=none — subdomains will now inherit the domain policy' });
+        } else {
+            parts.push(`sp=${tags['sp']}`);
+        }
+    }
+
+    // pct= — set to 100 or drop
+    if (tags['pct'] !== undefined && pct < 100) {
+        changes.push({ type: 'change', from: `pct=${tags['pct']}`, to: 'pct=100', reason: 'Set pct=100 to apply policy to all mail (not partial)' });
+        parts.push('pct=100');
+    } else if (tags['pct'] !== undefined && pct === 100) {
+        // keep but omit (100 is default)
+    }
+
+    // rua= — add placeholder if missing
+    if (tags['rua']) {
+        parts.push(`rua=${tags['rua']}`);
+    } else {
+        parts.push('rua=mailto:dmarc@yourdomain.com');
+        changes.push({ type: 'add', raw: 'rua=mailto:dmarc@yourdomain.com', reason: 'Added rua= placeholder — replace with your actual reporting address' });
+    }
+
+    // ruf= — keep if present
+    if (tags['ruf']) parts.push(`ruf=${tags['ruf']}`);
+
+    // adkim= — keep if valid
+    if (tags['adkim'] && ['r','s'].includes(tags['adkim'].toLowerCase())) {
+        parts.push(`adkim=${tags['adkim']}`);
+    }
+
+    // aspf= — keep if valid
+    if (tags['aspf'] && ['r','s'].includes(tags['aspf'].toLowerCase())) {
+        parts.push(`aspf=${tags['aspf']}`);
+    }
+
+    // fo= — keep if present and valid
+    if (tags['fo']) parts.push(`fo=${tags['fo']}`);
+
+    // ri= — keep if valid
+    if (tags['ri'] && !isNaN(parseInt(tags['ri'], 10))) {
+        parts.push(`ri=${tags['ri']}`);
+    }
+
+    return { record: parts.join('; '), changes };
+}
+
+// ─── Tag descriptions ─────────────────────────────────────────────────────────
+function tagColorClass(key, val) {
+    if (key === 'v') return 'tok-version';
+    if (key === 'p') {
+        if (val === 'reject') return 'tok-good';
+        if (val === 'quarantine') return 'tok-warn';
+        if (val === 'none') return 'tok-critical';
+        return 'tok-bad';
+    }
+    if (key === 'sp') {
+        if (val === 'reject') return 'tok-good';
+        if (val === 'quarantine') return 'tok-warn';
+        if (val === 'none') return 'tok-bad';
+        return 'tok-neutral';
+    }
+    if (key === 'pct') {
+        const n = parseInt(val, 10);
+        if (n === 100) return 'tok-good';
+        if (n >= 50)  return 'tok-warn';
+        return 'tok-bad';
+    }
+    if (key === 'rua' || key === 'ruf') return 'tok-good';
+    return 'tok-neutral';
+}
+
+function tagLabel(key) {
+    return {
+        v:     'Version',
+        p:     'Domain Policy',
+        sp:    'Subdomain Policy',
+        pct:   'Policy Coverage',
+        rua:   'Aggregate Reports',
+        ruf:   'Forensic Reports',
+        adkim: 'DKIM Alignment',
+        aspf:  'SPF Alignment',
+        fo:    'Failure Reporting',
+        ri:    'Report Interval',
+        rf:    'Report Format',
+    }[key] || key.toUpperCase();
+}
+
+function tagDescription(key, val) {
+    switch (key) {
+        case 'v':
+            return 'Identifies this as a DMARC record. Must be the first tag and must equal DMARC1.';
+        case 'p': {
+            const policies = {
+                none:       'Monitoring mode — receivers take no action on failing mail. Legitimate mail is unaffected, but so is spoofed mail. Use this to collect reports before enforcing.',
+                quarantine: 'Failing mail is delivered to the spam/junk folder. Better than none, but spoofed messages still reach recipients. Step toward p=reject.',
+                reject:     'Failing mail is rejected outright at the SMTP level — it never reaches the inbox. This is the strongest protection and the goal of DMARC deployment.',
+            };
+            return policies[val.toLowerCase()] || `Unknown policy: ${val}. Must be none, quarantine, or reject.`;
+        }
+        case 'sp': {
+            const policies = {
+                none:       'Subdomains have no DMARC enforcement — mail from sub.yourdomain.com bypasses DMARC entirely. High risk if your domain policy is quarantine or reject.',
+                quarantine: 'Subdomain mail that fails DMARC goes to spam. Applies to mail.yourdomain.com, marketing.yourdomain.com, etc.',
+                reject:     'Subdomain mail that fails DMARC is rejected. Provides full coverage across all subdomains.',
+            };
+            return (policies[val.toLowerCase()] || `Unknown subdomain policy: ${val}.`) + ' If sp= is omitted, subdomains inherit the p= policy.';
+        }
+        case 'pct': {
+            const n = parseInt(val, 10);
+            if (isNaN(n)) return `Invalid value. pct= must be an integer from 0 to 100.`;
+            if (n === 100) return 'Policy applies to all mail that fails DMARC. This is the correct production setting.';
+            return `Policy applies to only ${n}% of DMARC-failing messages. The remaining ${100 - n}% are treated as if no DMARC policy exists. Useful for staged rollouts — set to 100 when ready.`;
+        }
+        case 'rua':
+            return `Aggregate reports are sent to: ${val}. These are daily XML summaries showing every mail source that used your domain, how much mail it sent, and whether it passed DMARC. Essential for visibility.`;
+        case 'ruf':
+            return `Forensic (failure) reports are sent to: ${val}. These are per-message reports generated when individual messages fail DMARC. Support is inconsistent across mail providers.`;
+        case 'adkim': {
+            const modes = {
+                r: 'Relaxed (default) — the DKIM d= domain only needs to match the organizational domain. For example, DKIM signed by mail.example.com passes for example.com.',
+                s: 'Strict — the DKIM d= domain must exactly match the From: header domain. Tighter, but can break if you use subdomains for signing.',
+            };
+            return modes[val.toLowerCase()] || `Unknown value: ${val}. Must be r (relaxed) or s (strict).`;
+        }
+        case 'aspf': {
+            const modes = {
+                r: 'Relaxed (default) — the SPF-authenticated domain only needs to match the organizational domain. Allows a sending service\'s envelope From to differ slightly from your domain.',
+                s: 'Strict — the SPF envelope From domain must exactly match the header From domain. Breaks most third-party senders unless their envelope From uses your exact domain.',
+            };
+            return modes[val.toLowerCase()] || `Unknown value: ${val}. Must be r (relaxed) or s (strict).`;
+        }
+        case 'fo': {
+            const opts = { '0': 'Report when both SPF and DKIM fail (default).', '1': 'Report when either SPF or DKIM fails — more verbose, better visibility.', 'd': 'Report when DKIM fails, regardless of SPF.', 's': 'Report when SPF fails, regardless of DKIM.' };
+            const parts = val.split(':').map(v => opts[v.trim()] || `Unknown option: ${v}`);
+            return parts.join(' / ');
+        }
+        case 'ri': {
+            const n = parseInt(val, 10);
+            if (isNaN(n)) return 'Invalid value. ri= must be an integer (seconds). Default is 86400 (24 hours).';
+            const hours = Math.round(n / 3600);
+            return `Requests aggregate reports every ${n.toLocaleString()} seconds (~${hours} hour${hours !== 1 ? 's' : ''}). Most receivers send reports once daily regardless of this value.`;
+        }
+        case 'rf':
+            return `Report format: ${val}. afrf (Authentication Failure Reporting Format) is the only format in widespread use.`;
+        default:
+            return `Unrecognized DMARC tag. This will be ignored by receivers.`;
+    }
+}
+
+// ─── Verdict ──────────────────────────────────────────────────────────────────
+function buildVerdict(analysis) {
+    if (!analysis.valid) return { text: analysis.error, color: 'var(--bad)' };
+    const { tags, score, pct } = analysis;
+    const p = (tags['p'] || '').toLowerCase();
+
+    if (!tags['p'])
+        return { text: 'This record is missing the required p= tag — it is invalid and receivers will ignore it entirely.', color: 'var(--bad)' };
+    if (p === 'none')
+        return { text: 'Policy is p=none — DMARC is in monitoring mode only. Spoofed mail is delivered just like legitimate mail. No enforcement is in place.', color: 'var(--bad)' };
+    if (p === 'quarantine' && pct < 50)
+        return { text: `Policy is p=quarantine but pct=${pct} — less than half of DMARC-failing mail is affected. Most spoofed messages will be delivered normally.`, color: 'var(--bad)' };
+    if (p === 'quarantine')
+        return { text: `Policy is p=quarantine — failing mail goes to spam, not rejected. Better than none, but spoofed mail can still reach recipients. Advance to p=reject when ready.`, color: 'var(--warn)' };
+    if (p === 'reject' && pct < 100)
+        return { text: `Policy is p=reject but pct=${pct} — ${100-pct}% of failing mail bypasses enforcement. Set pct=100 to fully close the gap.`, color: 'var(--warn)' };
+    if (p === 'reject' && score >= 80)
+        return { text: 'Policy is p=reject with full coverage — DMARC is enforced and unauthorized senders are rejected at the gateway.', color: 'var(--good)' };
+    if (p === 'reject')
+        return { text: 'Policy is p=reject, but there are issues that should be addressed to fully harden this record.', color: 'var(--warn)' };
+    return { text: 'Review the issues below to improve this record.', color: 'var(--warn)' };
+}
+
+// ─── Rendering ────────────────────────────────────────────────────────────────
+let _correctedRecord = '';
+
+function renderResults(analysis) {
+    if (!analysis) return;
+    document.getElementById('results').classList.remove('hidden');
+
+    const verdictEl = document.getElementById('verdict');
+    const v = buildVerdict(analysis);
+    verdictEl.textContent = v.text;
+    verdictEl.style.borderLeftColor = v.color;
+    verdictEl.style.color = v.color;
+
+    if (!analysis.valid) {
+        document.getElementById('score-num').textContent = '—';
+        document.getElementById('score-sublabel').textContent = '';
+        document.getElementById('policy-val').textContent = '—';
+        document.getElementById('policy-sublabel').textContent = '';
+        document.getElementById('pct-val').textContent = '—';
+        document.getElementById('pct-sublabel').textContent = '';
+        document.getElementById('token-list').innerHTML = '';
+        document.getElementById('issues-card').classList.add('hidden');
+        document.getElementById('fixes-card').classList.add('hidden');
+        document.getElementById('corrected-box').textContent = '';
+        document.getElementById('changes-list').innerHTML = '';
+        return;
+    }
+
+    const { tags, tagOrder, score, pct, issues } = analysis;
+    const p = (tags['p'] || '').toLowerCase();
+
+    // Score
+    const scoreEl = document.getElementById('score-num');
+    scoreEl.textContent = score;
+    scoreEl.style.color = score >= 80 ? 'var(--good)' : score >= 55 ? 'var(--warn)' : 'var(--bad)';
+    const scoreSubEl = document.getElementById('score-sublabel');
+    scoreSubEl.textContent = score >= 80 ? 'Well configured' : score >= 55 ? 'Needs hardening' : score >= 30 ? 'Significant issues' : 'Critical problems';
+    scoreSubEl.style.color = score >= 80 ? 'var(--good)' : score >= 55 ? 'var(--warn)' : 'var(--bad)';
+
+    // Policy
+    const policyEl = document.getElementById('policy-val');
+    const policySubEl = document.getElementById('policy-sublabel');
+    if (tags['p']) {
+        policyEl.textContent = tags['p'];
+        const pColors = { reject: 'var(--good)', quarantine: 'var(--warn)', none: 'var(--bad)' };
+        policyEl.style.color = pColors[p] || 'var(--bad)';
+        const pLabels = { reject: 'Enforced (best)', quarantine: 'Spam folder', none: 'No enforcement' };
+        policySubEl.textContent = pLabels[p] || 'Unknown';
+        policySubEl.style.color = pColors[p] || 'var(--bad)';
+    } else {
+        policyEl.textContent = 'missing';
+        policyEl.style.color = 'var(--bad)';
+        policySubEl.textContent = 'Record invalid';
+        policySubEl.style.color = 'var(--bad)';
+    }
+
+    // pct
+    const pctEl = document.getElementById('pct-val');
+    const pctSubEl = document.getElementById('pct-sublabel');
+    pctEl.textContent = pct + '%';
+    pctEl.style.color = pct === 100 ? 'var(--good)' : pct >= 50 ? 'var(--warn)' : 'var(--bad)';
+    pctSubEl.textContent = pct === 100 ? 'Full coverage' : `${100 - pct}% uncovered`;
+    pctSubEl.style.color = pct === 100 ? 'var(--good)' : pct >= 50 ? 'var(--warn)' : 'var(--bad)';
+
+    // Tag breakdown — show all parsed tags, then note missing important ones
+    const tokenList = document.getElementById('token-list');
+    tokenList.innerHTML = '';
+
+    const shownKeys = new Set();
+    for (const { key, val, raw } of tagOrder) {
+        shownKeys.add(key);
+        const colorCls = tagColorClass(key, val);
+        const label = tagLabel(key);
+        const desc = tagDescription(key, val);
+        const row = document.createElement('div');
+        row.className = 'token-item';
+        row.innerHTML = `
+            <div class="token-raw ${colorCls}">${esc(raw)}</div>
+            <div class="token-body">
+                <div class="token-mech">${esc(label)}</div>
+                <div class="token-desc">${esc(desc)}</div>
+            </div>`;
+        tokenList.appendChild(row);
+    }
+
+    // Show missing important tags
+    const importantMissing = [
+        { key: 'rua',  label: 'Aggregate Reports (rua=)', desc: 'Not set — no aggregate reports will be sent. You have no visibility into your mail flow or spoofing attempts.' },
+        { key: 'sp',   label: 'Subdomain Policy (sp=)',   desc: 'Not set — subdomains will inherit the p= policy. This is usually the correct behavior; set explicitly if subdomains have a different mail setup.' },
+        { key: 'ruf',  label: 'Forensic Reports (ruf=)',  desc: 'Not set — forensic (per-failure) reports will not be sent. Optional, but useful for debugging authentication failures.' },
+    ];
+    for (const { key, label, desc } of importantMissing) {
+        if (!shownKeys.has(key)) {
+            const row = document.createElement('div');
+            row.className = 'token-item';
+            row.innerHTML = `
+                <div class="token-raw tok-missing">${esc(key)}= (not set)</div>
+                <div class="token-body">
+                    <div class="token-mech">${esc(label)}</div>
+                    <div class="token-desc">${esc(desc)}</div>
+                </div>`;
+            tokenList.appendChild(row);
+        }
+    }
+
+    // Issues
+    const issuesCard = document.getElementById('issues-card');
+    if (issues.length > 0) {
+        issuesCard.classList.remove('hidden');
+        const list = document.getElementById('issue-list');
+        list.innerHTML = '';
+        for (const issue of issues) {
+            const item = document.createElement('div');
+            item.className = 'issue-item';
+            item.innerHTML = `
+                <div style="padding-top:1px;flex-shrink:0;"><span class="badge badge-${issue.severity}">${issue.severity}</span></div>
+                <div class="issue-body">
+                    <div class="issue-title">${esc(issue.title)}</div>
+                    <div class="issue-detail">${esc(issue.detail)}</div>
+                </div>`;
+            list.appendChild(item);
+        }
+    } else {
+        issuesCard.classList.add('hidden');
+    }
+
+    // Fixes
+    const fixesCard = document.getElementById('fixes-card');
+    const fixableIssues = issues.filter(i => i.fix);
+    if (fixableIssues.length > 0) {
+        fixesCard.classList.remove('hidden');
+        const list = document.getElementById('fix-list');
+        list.innerHTML = '';
+        fixableIssues.forEach((issue, idx) => {
+            const item = document.createElement('div');
+            item.className = 'fix-item';
+            item.innerHTML = `
+                <div class="fix-num">${idx + 1}</div>
+                <div class="fix-body">
+                    <div class="fix-title" style="color:${sevColor(issue.severity)}">${esc(issue.title)}</div>
+                    <div class="fix-detail">${esc(issue.fix)}</div>
+                </div>`;
+            list.appendChild(item);
+        });
+    } else {
+        fixesCard.classList.add('hidden');
+    }
+
+    // Corrected record
+    const corrected = analysis.corrected;
+    _correctedRecord = corrected.record;
+
+    const correctedBox = document.getElementById('corrected-box');
+    if (corrected.changes.length === 0) {
+        correctedBox.textContent = corrected.record;
+    } else {
+        // Highlight changed/added tokens
+        const changeMap = new Map();
+        for (const c of corrected.changes) {
+            if (c.type === 'change') changeMap.set(c.to,  'tok-changed');
+            if (c.type === 'add')   changeMap.set(c.raw, 'tok-added');
+        }
+        const recordParts = corrected.record.split(/;\s*/);
+        const highlighted = recordParts.map(part => {
+            // Match against change map by prefix
+            for (const [key, cls] of changeMap) {
+                if (part.trim() === key.trim() || part.trim().startsWith(key.trim().split('=')[0] + '=')) {
+                    if (changeMap.has(part.trim())) return `<span class="${cls}">${esc(part.trim())}</span>`;
+                }
+            }
+            return `<span class="tok-kept">${esc(part.trim())}</span>`;
+        });
+        correctedBox.innerHTML = highlighted.join('; ');
+    }
+
+    // Changes list
+    const changesList = document.getElementById('changes-list');
+    if (corrected.changes.length > 0) {
+        changesList.innerHTML = '';
+        for (const c of corrected.changes) {
+            const item = document.createElement('div');
+            item.className = 'change-item';
+            const dotCls = c.type === 'add' ? 'change-dot-add' : c.type === 'remove' ? 'change-dot-remove' : 'change-dot-change';
+            let text = '';
+            if (c.type === 'add')    text = `Added <code>${esc(c.raw)}</code> — ${esc(c.reason)}`;
+            if (c.type === 'remove') text = `Removed <code>${esc(c.raw)}</code> — ${esc(c.reason)}`;
+            if (c.type === 'change') text = `Changed <code>${esc(c.from)}</code> to <code>${esc(c.to)}</code> — ${esc(c.reason)}`;
+            item.innerHTML = `<span class="change-dot ${dotCls}"></span><span>${text}</span>`;
+            changesList.appendChild(item);
+        }
+    } else {
+        changesList.innerHTML = '<div class="change-item"><span class="change-dot change-dot-add"></span><span style="color:var(--good)">No changes needed — this record is already well formed.</span></div>';
+    }
+
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function esc(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function sevColor(sev) {
+    return { critical: 'var(--bad)', high: '#ff8c32', medium: 'var(--warn)', low: 'var(--accent)' }[sev] || 'var(--text)';
+}
+
+// ─── Actions ──────────────────────────────────────────────────────────────────
+function runAnalysis() {
+    const input = document.getElementById('record-input').value.trim();
+    if (!input) return;
+    const analysis = analyzeDMARC(input);
+    renderResults(analysis);
+}
+
+function clearAll() {
+    document.getElementById('record-input').value = '';
+    document.getElementById('results').classList.add('hidden');
+}
+
+function copyRecord() {
+    if (!_correctedRecord) return;
+    navigator.clipboard.writeText(_correctedRecord).then(() => {
+        const btn = document.getElementById('copy-btn');
+        const confirm = document.getElementById('copy-confirm');
+        btn.textContent = 'Copied';
+        confirm.classList.remove('hidden');
+        setTimeout(() => {
+            btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy Record`;
+            confirm.classList.add('hidden');
+        }, 2000);
+    });
+}
+
+document.getElementById('record-input').addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runAnalysis();
+});
+
+// URL param pre-population
+(function () {
+    const params = new URLSearchParams(window.location.search);
+    const rec = params.get('record');
+    if (rec) {
+        document.getElementById('record-input').value = rec;
+        runAnalysis();
+    }
+})();
+</script>
+<script>(function(){var b=document.getElementById("badge-btn"),p=document.getElementById("badge-popover");if(!b||!p)return;function c(){p.classList.remove("open")}b.addEventListener("click",function(e){e.stopPropagation();p.classList.toggle("open")});document.addEventListener("click",c);document.addEventListener("keydown",function(e){if(e.key==="Escape")c()});})();</script>
+</body>
+</html>
