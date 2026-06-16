@@ -706,6 +706,10 @@ function scoreLabel(score, isRevoked) {
 
 function buildVerdict(result, domain, selector) {
     const { score, isRevoked, isEd25519, keyBits, k, t, issues } = result;
+    // Escape user-controlled values once — they're only used for display below
+    // and get injected via innerHTML (the dkim-verdict sink).
+    domain = escHtml(domain);
+    selector = escHtml(selector);
 
     if (isRevoked) {
         return `<strong>This DKIM key is revoked.</strong> The selector <code>${selector}._domainkey.${domain}</code> is intentionally retired — its p= tag is empty. Any email signed with this selector will fail DKIM verification. If this domain sends mail, a different active selector must be in use.`;
@@ -794,12 +798,12 @@ function tagDescription(key, val, result) {
         case 'v':
             return val === 'DKIM1'
                 ? 'Version identifier. Must be DKIM1 and should appear as the first tag. Tells receivers this is a DKIM public key record.'
-                : `Unrecognized version "${val}". Only DKIM1 is valid — receivers may ignore this record.`;
+                : `Unrecognized version "${escHtml(val)}". Only DKIM1 is valid — receivers may ignore this record.`;
         case 'k': {
             const kl = (val||'rsa').toLowerCase();
             if (kl === 'rsa') return 'RSA is the most widely supported DKIM key type. The p= value is a base64-encoded RSA SubjectPublicKeyInfo (SPKI) structure. 2048-bit keys are the recommended minimum.';
             if (kl === 'ed25519') return 'Ed25519 is a modern elliptic-curve key type with strong security properties and compact key size. Supported by major mail providers. Equivalent in strength to a ~3000-bit RSA key.';
-            return `"${val}" is not a recognized key type. Supported values are rsa and ed25519.`;
+            return `"${escHtml(val)}" is not a recognized key type. Supported values are rsa and ed25519.`;
         }
         case 'p': {
             if (val === '') return 'Empty p= means this key is revoked. Receiving servers will treat any email signed with this selector as a DKIM failure.';
@@ -813,14 +817,14 @@ function tagDescription(key, val, result) {
             const parts = [];
             if (flags.includes('y')) parts.push('<strong>y</strong>: Testing mode — receivers should not reject mail based on this key. Remove when ready for production.');
             if (flags.includes('s')) parts.push('<strong>s</strong>: Strict — this key only applies to the exact domain, not subdomains (i=@domain only).');
-            return parts.length ? parts.join('<br>') : `Flag value "${val}" — no recognized flags detected.`;
+            return parts.length ? parts.join('<br>') : `Flag value "${escHtml(val)}" — no recognized flags detected.`;
         }
         case 'h': {
             const algos = (val||'').split(':').map(a => a.trim());
             const desc = algos.map(a => {
                 if (a === 'sha256') return '<strong>sha256</strong>: Recommended — cryptographically strong.';
                 if (a === 'sha1') return '<strong>sha1</strong>: Deprecated — SHA-1 is broken for collision resistance. Keep only as fallback, not sole option.';
-                return `<strong>${a}</strong>: Unrecognized algorithm.`;
+                return `<strong>${escHtml(a)}</strong>: Unrecognized algorithm.`;
             }).join('<br>');
             return desc || 'Specifies which hash algorithms are acceptable for DKIM signatures using this key.';
         }
@@ -828,12 +832,12 @@ function tagDescription(key, val, result) {
             const services = (val||'').split(':').map(s => s.trim());
             if (services.includes('*')) return 'Wildcard — this key is valid for all services. This is the default and most common value.';
             if (services.includes('email')) return 'Restricts this key to email service only. Mail signed with this key for other services would fail verification.';
-            return `Service type restricted to: ${val}`;
+            return `Service type restricted to: ${escHtml(val)}`;
         }
         case 'n':
-            return `Human-readable notes for key administrators: "${val}". These notes are not used by receivers — they exist for documentation purposes only.`;
+            return `Human-readable notes for key administrators: "${escHtml(val)}". These notes are not used by receivers — they exist for documentation purposes only.`;
         default:
-            return `"${key}" is not a standard DKIM tag and will be ignored by receivers.`;
+            return `"${escHtml(key)}" is not a standard DKIM tag and will be ignored by receivers.`;
     }
 }
 
@@ -984,7 +988,8 @@ function escHtml(str) {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 // ─── Not found / error states ─────────────────────────────────────────────────

@@ -245,7 +245,7 @@
             <div>
                 <div class="ip-label">Originating IP</div>
                 <div class="ip-addr" id="ipAddr">—</div>
-                <div class="ip-note" id="ipNote">Last external server before your mail provider</div>
+                <div class="ip-note" id="ipNote">First server in the chain — where the message originated</div>
             </div>
             <a class="ip-lookup" id="ipLookup" href="#" target="_blank" rel="noopener">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M6 3v3l2 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
@@ -450,10 +450,11 @@ function parseAuth(value) {
     const dkim = value.match(/dkim=(pass|fail|none|neutral|permerror|policy|temperror)/i);
     if (dkim) {
         a.dkim = dkim[1].toLowerCase();
-        const dm = value.match(/header\.i=@?([^\s;]+)/i);
+        // Prefer header.d= (authoritative signing domain); fall back to header.i= (AUID).
+        const dm = value.match(/header\.d=([^\s;]+)/i) || value.match(/header\.i=@?([^\s;]+)/i);
         if (dm) a.dkimDomain = dm[1].toLowerCase();
     }
-    const dmarc = value.match(/dmarc=(pass|fail|none|bestguesspass)/i);
+    const dmarc = value.match(/dmarc=(pass|fail|none|bestguesspass|temperror|permerror)/i);
     if (dmarc) {
         a.dmarc = dmarc[1].toLowerCase();
         const dm = value.match(/header\.from=([^\s;)]+)/i);
@@ -654,7 +655,7 @@ function renderAuth(spf, dkim, dmarc) {
 function renderKeyHeaders(rows) {
     const t = document.getElementById('keyHdrTable');
     t.innerHTML = rows.map(([label, val, flag]) =>
-        `<tr><td>${label}</td><td>${val || '<span style="color:var(--muted);opacity:.5">—</span>'}${flag ? `<span class="hdr-flag">${flag}</span>` : ''}</td></tr>`
+        `<tr><td>${esc(label)}</td><td>${val ? esc(val) : '<span style="color:var(--muted);opacity:.5">—</span>'}${flag ? `<span class="hdr-flag">${esc(flag)}</span>` : ''}</td></tr>`
     ).join('');
 }
 
@@ -707,7 +708,7 @@ function renderFlags(flags) {
 }
 
 function esc(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // ── Main analyze ──────────────────────────────────────────────────────────────
@@ -739,7 +740,7 @@ function analyze() {
     const receivedHeaders = getAll(headers, 'received');
     const hops = receivedHeaders.map(parseReceived);
 
-    // Originating IP: last external server = last received hop (bottom of the list)
+    // Originating IP: the oldest Received hop (bottom of the list) is the source server
     let originIP = null;
     for (let i = hops.length - 1; i >= 0; i--) {
         if (hops[i].ip && !isPrivateIP(hops[i].ip)) { originIP = hops[i].ip; break; }
